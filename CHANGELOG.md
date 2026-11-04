@@ -30,3 +30,6 @@
 - run_daily v0.4.0 / borsa_italiana v0.3.0: 2 richieste in parallelo con ritmo globale (--workers, --delay 0,5), salto nei
   giorni di chiusura Borsa Italiana (15/8, 24/12, 31/12 + TARGET), cambi BCE in meta.fx.
 - app v0.4.0: pagina Diagnostica (ⓘ), equivalenti in euro per i titoli in valuta con avvertenza cambio, importi nella valuta del titolo.
+- app v0.5.0 / portfolio.js v0.1.0: portafoglio sul dispositivo (posizioni con costo effettivo, cedole incassate, latente,
+  YTM netto bloccato al carico), calendario cedole/rimborsi 12 mesi, zainetto fiscale (manuale + previsto), backup JSON.
+  Verificato a mano su BTP 6,5% Nv27 comprato a 103,18 il 04/11/2024.

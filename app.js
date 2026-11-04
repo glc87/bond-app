@@ -1,8 +1,8 @@
-/* app.js — v0.4.0 — Bond Netto (PWA) */
+/* app.js — v0.5.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.4.0";
+  const APP_VERSION = "0.5.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -251,7 +251,8 @@
       + ((b.anomalies || []).length ? `<div class="note">Note tecniche: ${b.anomalies.map(esc).join("<br>")}</div>` : "");
     const calc = b._calc ? `<div class="amount"><label>Importo nominale</label><input id="d-amount" type="number" step="${b.min_lot || 1000}" min="${b.min_lot || 1000}" value="${nominal}"> €</div>
       <div id="d-calc">${calcHTML(b, nominal)}</div>` : `<div class="note">Rendimento non calcolato: ${esc(b.not_computable_reason)}</div>`;
-    return `${anomalies}${calc}<h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
+    const addBtn = b._calc ? `<div class="row"><button class="btn ghost" data-pf-add="${b.isin}">+ Aggiungi al portafoglio</button></div>` : "";
+    return `${anomalies}${calc}${addBtn}<h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
       <p class="hint" style="margin-top:12px"><a href="${esc(b.scheda_url)}" target="_blank" rel="noopener">Scheda su Borsa Italiana ↗</a></p>`;
   }
 
@@ -418,6 +419,7 @@
       $("#meta").textContent = "Dati non disponibili: " + e.message;
     }
   }
+  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail };
   load();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

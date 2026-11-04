@@ -124,3 +124,12 @@ table.kv td:last-child { text-align: right; font-variant-numeric: tabular-nums; 
 .btn.ghost { background: transparent; color: var(--accent); }
 .amount { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
 .amount input { width: 140px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font-size: 15px; }
+
+/* portafoglio */
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.inline-form input { flex: 1 1 140px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font-size: 14px; }
+.card.pos { grid-template-columns: 1fr auto; grid-template-areas: "name net"; }
+.pos .c-net { text-align: right; }
+.pos-actions { margin-top: 4px; font-size: 12.5px; }
+h4.sub { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+@media (min-width: 900px) { .card.pos { grid-template-columns: 1fr auto; grid-template-areas: "name net"; } }
