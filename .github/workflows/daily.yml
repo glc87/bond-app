@@ -1,0 +1,61 @@
+name: Aggiornamento giornaliero bond
+
+on:
+  schedule:
+    # 15:00 UTC = 16:00 ora italiana in inverno, 17:00 in estate. MOT aperto (chiude 17:30).
+    - cron: "0 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Numero massimo di titoli (vuoto = tutti)"
+        required: false
+        default: ""
+      segments:
+        description: "Segmenti separati da spazio (vuoto = tutti): btp bot cct ctz obbligazioni-euro euro-obbligazioni"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-bonds
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r scraper/requirements.txt
+
+      - name: Esegui scraper e calcoli
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
+          if [ -n "${{ github.event.inputs.segments }}" ]; then ARGS="$ARGS --segments ${{ github.event.inputs.segments }}"; fi
+          python scraper/run_daily.py $ARGS
+
+      - name: Riepilogo
+        run: |
+          echo "## Risultato run" >> $GITHUB_STEP_SUMMARY
+          python - <<'PY' >> $GITHUB_STEP_SUMMARY
+          import json; m=json.load(open('data/meta.json'))
+          for k in ['trade_date','n_total','n_computable','n_failed','n_with_anomalies','n_tax_not_confirmed','requests','duration_s','price_source','by_kind','by_currency']:
+              print(f"- **{k}**: `{m.get(k)}`")
+          PY
+
+      - name: Commit dei dati
+        run: |
+          git config user.name "bond-bot"
+          git config user.email "bond-bot@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet && echo "Nessun cambiamento" || git commit -m "data: aggiornamento $(date -u +%Y-%m-%d)"
+          git push
