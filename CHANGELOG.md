@@ -10,3 +10,4 @@
 - Primo run reale su GitHub Actions (15 BTP/strip): 15/15 calcolati, tutti con ask dal book.
 - yields.py v0.1.2: la verifica "convenzione BI" per gli zero coupon usa il netto tassato
   (BI tassa lo scarto di emissione degli ZC, non la plusvalenza dei titoli con cedola).
+- yields.py v0.1.3 / app.js v0.1.1: default commissioni 0,19% min 5 € max 19 € (verificati Fineco e ING); bollo 0,2% confermato anche sui BTP.

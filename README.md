@@ -13,7 +13,7 @@ valuta e **rendimento netto** per un investitore privato italiano.
 ## Calcolo del netto (vedi `scraper/yields.py`)
 - Tasse 12,5% (Stato/sovranazionali) o 26% (altri) su cedole, rateo e plusvalenza a scadenza.
 - Prezzo sopra 100: la minusvalenza viene segnalata, non conteggiata.
-- Commissioni (default 0,19%, min 9 €, max 19 €) e bollo 0,2% annuo inclusi nei dati "all-in".
+- Commissioni (default 0,19%, min 5 €, max 19 €: percentuale vincolata tra minimo e massimo) e bollo 0,2% annuo inclusi nei dati "all-in".
 - Rendimento calcolato sul prezzo **ask** quando disponibile, altrimenti sul riferimento.
 - Verifica incrociata automatica con i rendimenti pubblicati da Borsa Italiana
   (che, nota: nel "netto" non tassano la plusvalenza).

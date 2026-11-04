@@ -1,5 +1,5 @@
 """
-yields.py — v0.1.2
+yields.py — v0.1.3
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -19,7 +19,8 @@ Convenzioni (documentate perché incidono sui numeri):
     costo = prezzo + rateo_netto.  Plusvalenza tassata = max(0, 100 - prezzo).
     Se prezzo > 100 si genera una MINUSVALENZA (credito compensabile 4 anni),
     che NON viene conteggiata nel rendimento (prudenziale) ma viene riportata.
-  - Commissioni: percentuale sul controvalore con min/max, pagate all'acquisto.
+  - Commissioni: percentuale sul controvalore, vincolata tra un minimo e un massimo
+    (es. Fineco 0,19% min 2,95 max 19 €; ING 0,19% min 8 max 18 €), pagate all'acquisto.
     Alla scadenza il rimborso non ha commissioni.
   - Imposta di bollo: 0,2% annuo sul valore di mercato. Approssimata come
     0,2% * media(prezzo, 100) per ogni anno (o frazione) di detenzione.
@@ -34,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -55,8 +56,10 @@ GOV_TIPOLOGIE = {"titoli di stato italiani", "titoli di stato esteri"}
 
 @dataclass
 class CostParams:
+    # Verificato 04/11/2026: Fineco 0,19% min 2,95 max 19; ING 0,19% min 8 max 18 (fino a 15 ordini/anno).
+    # La percentuale è vincolata tra minimo e massimo: NON si sommano.
     commission_pct: float = 0.0019   # 0,19 %
-    commission_min: float = 9.0      # €
+    commission_min: float = 5.0      # €
     commission_max: float = 19.0     # € (None = nessun massimo)
     bollo_rate: float = BOLLO_RATE
     nominal: float = 10_000.0        # nominale di riferimento per i valori in €
