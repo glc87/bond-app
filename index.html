@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bond Netto</title>
+<meta name="description" content="Rendimenti netti delle obbligazioni quotate sul MOT per l'investitore privato italiano">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Bond Netto</h1>
+    <div class="sub" id="meta">caricamento…</div>
+  </div>
+  <button class="icon-btn" id="btn-settings" title="Impostazioni" aria-label="Impostazioni">⚙</button>
+</header>
+
+<main>
+  <section class="filters">
+    <input id="q" type="search" placeholder="Cerca per nome, ISIN o emittente" autocomplete="off">
+    <div class="chips" id="cat-chips">
+      <button class="chip on" data-cat="all">Tutti</button>
+      <button class="chip" data-cat="gov_it">Stato Italia</button>
+      <button class="chip" data-cat="gov_fx">Stati esteri</button>
+      <button class="chip" data-cat="supra">Sovranazionali</button>
+      <button class="chip" data-cat="other">Corporate e altri</button>
+    </div>
+    <details class="more">
+      <summary>Filtri avanzati <span id="filter-count"></span></summary>
+      <div class="grid">
+        <label>Valuta <select id="f-cur"><option value="">Tutte</option></select></label>
+        <label>Paese <select id="f-country"><option value="">Tutti</option></select></label>
+        <label>Tipo <select id="f-kind">
+          <option value="computable">Calcolabili (fisso e zero coupon)</option>
+          <option value="fixed">Solo tasso fisso</option>
+          <option value="zero">Solo zero coupon</option>
+          <option value="all">Tutti, anche non calcolabili</option>
+        </select></label>
+        <label>Scadenza min (anni) <input id="f-ymin" type="number" min="0" step="0.5" value="1"></label>
+        <label>Scadenza max (anni) <input id="f-ymax" type="number" min="0" step="1" placeholder="∞"></label>
+        <label>Netto annuo min % <input id="f-nmin" type="number" step="0.1" placeholder="es. 3"></label>
+        <label>Lotto minimo max € <input id="f-lot" type="number" step="1000" placeholder="es. 1000"></label>
+        <label class="check"><input id="f-ask" type="checkbox"> Solo con prezzo ask reale</label>
+        <label class="check"><input id="f-nominus" type="checkbox"> Escludi sopra la pari (minusvalenza)</label>
+      </div>
+    </details>
+  </section>
+
+  <section class="best" id="best"></section>
+
+  <section class="results">
+    <div class="results-head">
+      <span id="count"></span>
+      <label>Ordina <select id="sort">
+        <option value="simple_net_all:desc">Netto annuo ↓</option>
+        <option value="ytm_net_tax:desc">YTM netto ↓</option>
+        <option value="ytm_gross:desc">YTM lordo ↓</option>
+        <option value="years:asc">Scadenza ↑</option>
+        <option value="years:desc">Scadenza ↓</option>
+        <option value="price:asc">Prezzo ↑</option>
+        <option value="coupon:desc">Cedola ↓</option>
+        <option value="name:asc">Nome A-Z</option>
+      </select></label>
+    </div>
+    <div id="list" class="list"></div>
+    <button id="more-btn" class="more-btn hidden">Mostra altri</button>
+  </section>
+
+  <footer>
+    <p>Prezzi: Borsa Italiana (MOT), ritardo 15'. Rendimenti netti calcolati per un investitore privato residente in Italia
+      (12,5% titoli di Stato e sovranazionali, 26% altri), tasse su cedole, rateo e plusvalenza; commissioni e bollo secondo le impostazioni.
+      Dati indicativi, non costituiscono consulenza. <a href="https://github.com/glc87/bond-app" target="_blank" rel="noopener">Codice e metodo</a>.</p>
+  </footer>
+</main>
+
+<!-- Scheda titolo -->
+<div class="modal hidden" id="detail" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h2 id="d-name"></h2>
+        <div class="sub" id="d-sub"></div>
+      </div>
+      <button class="icon-btn" data-close aria-label="Chiudi">✕</button>
+    </div>
+    <div class="sheet-body" id="d-body"></div>
+  </div>
+</div>
+
+<!-- Impostazioni -->
+<div class="modal hidden" id="settings" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Impostazioni</h2>
+      <button class="icon-btn" data-close aria-label="Chiudi">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p class="hint">Questi parametri servono per il rendimento "all-in" (netto annuo). Si salvano su questo dispositivo.</p>
+      <div class="grid">
+        <label>Importo nominale di riferimento € <input id="s-nominal" type="number" step="1000" min="1000"></label>
+        <label>Commissione % <input id="s-pct" type="number" step="0.01" min="0"></label>
+        <label>Commissione minima € <input id="s-min" type="number" step="0.5" min="0"></label>
+        <label>Commissione massima € (vuoto = nessuna) <input id="s-max" type="number" step="0.5" min="0"></label>
+        <label>Imposta di bollo % annuo <input id="s-bollo" type="number" step="0.01" min="0"></label>
+      </div>
+      <div class="row">
+        <button class="btn" id="s-save">Salva</button>
+        <button class="btn ghost" id="s-reset">Ripristina default</button>
+      </div>
+      <h3>Come leggere i numeri</h3>
+      <ul class="hint">
+        <li><b>Netto annuo</b>: guadagno netto totale (cedole nette + rimborso netto − costo − bollo) diviso costo e anni. Nessuna ipotesi di reinvestimento: è il dato "certo".</li>
+        <li><b>YTM netto</b>: tasso composto che eguaglia costo e flussi netti (tasse su cedole, rateo e plusvalenza), senza commissioni e bollo. Confrontabile con altri siti.</li>
+        <li><b>YTM lordo</b>: come pubblicato da Borsa Italiana.</li>
+        <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione; <span class="badge ref">rif</span> = prezzo di riferimento (nessuna proposta in vendita).</li>
+        <li><b>Sopra 100</b>: a scadenza si genera una minusvalenza (credito fiscale, 4 anni): non è conteggiata nel rendimento ma viene indicata.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="yields.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
