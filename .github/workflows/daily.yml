@@ -41,7 +41,7 @@ jobs:
           ARGS=""
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
           if [ -n "${{ github.event.inputs.segments }}" ]; then ARGS="$ARGS --segments ${{ github.event.inputs.segments }}"; fi
-          python scraper/run_daily.py $ARGS
+          python scraper/run_daily.py --delay 0.6 $ARGS
 
       - name: Riepilogo
         run: |
@@ -57,5 +57,13 @@ jobs:
           git config user.name "bond-bot"
           git config user.email "bond-bot@users.noreply.github.com"
           git add data/
-          git diff --cached --quiet && echo "Nessun cambiamento" || git commit -m "data: aggiornamento $(date -u +%Y-%m-%d)"
-          git push
+          if git diff --cached --quiet; then echo "Nessun cambiamento"; exit 0; fi
+          git commit -m "data: aggiornamento $(date -u +%Y-%m-%d)"
+          # il run dura ~1h: nel frattempo main può essere avanzato (nuovo codice). Riallineo prima di pubblicare.
+          for i in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep 15
+          done
+          echo "Push fallito dopo 3 tentativi"; exit 1

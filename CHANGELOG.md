@@ -11,3 +11,4 @@
 - yields.py v0.1.2: la verifica "convenzione BI" per gli zero coupon usa il netto tassato
   (BI tassa lo scarto di emissione degli ZC, non la plusvalenza dei titoli con cedola).
 - yields.py v0.1.3 / app.js v0.1.1: default commissioni 0,19% min 5 € max 19 € (verificati Fineco e ING); bollo 0,2% confermato anche sui BTP.
+- Workflow: rebase su origin/main prima del push (il primo run completo, 1820 titoli / 1449 calcolabili / 0 falliti in 94', aveva perso i dati per push rifiutato); delay 0,6 s.
