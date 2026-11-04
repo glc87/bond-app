@@ -1,4 +1,4 @@
-/* app.js — v0.2.0 — Bond Netto (PWA) */
+/* app.js — v0.2.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
@@ -217,6 +217,19 @@
       commissionMax: maxv === "" ? null : parseFloat(maxv), bolloRate: num("#s-bollo", DEFAULTS.bolloRate) };
     saveSettings(state.settings); $("#settings").classList.add("hidden"); recompute(); applyFilters();
   });
+  // Profili commissioni verificati il 04/11/2026 (fonti: finecobank.com, qualebanca.com, finanzadigitale.com)
+  const PROFILES = {
+    fineco: { commissionPct: 0.19, commissionMin: 2.95, commissionMax: 19 },
+    ing: { commissionPct: 0.19, commissionMin: 8, commissionMax: 18 },
+    directa: { commissionPct: 0, commissionMin: 5, commissionMax: 5 },
+    mediolanum: { commissionPct: 0.19, commissionMin: 7, commissionMax: 29 },
+    sella: { commissionPct: 0.185, commissionMin: 2.5, commissionMax: 12 },
+  };
+  $("#s-profile").addEventListener("change", e => {
+    const pr = PROFILES[e.target.value]; if (!pr) return;
+    $("#s-pct").value = pr.commissionPct; $("#s-min").value = pr.commissionMin; $("#s-max").value = pr.commissionMax;
+  });
+  ["#s-pct", "#s-min", "#s-max"].forEach(id => $(id).addEventListener("input", () => { $("#s-profile").value = ""; }));
   $("#s-reset").addEventListener("click", () => { state.settings = { ...DEFAULTS }; saveSettings(state.settings); openSettings(); });
 
   // ---------------- eventi ----------------

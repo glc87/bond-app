@@ -22,3 +22,4 @@
   * verifica BI: per i "Tf 0%" convenzione "con cedola", per strip/BOT/Zc convenzione "scarto tassato"
   * esito rielaborazione offline: 1486 calcolabili; 1342/1387 entro 0,02 dal YTM lordo BI
 - v0.2.2 / app v0.2.0: qualità del prezzo (ask / scambiato oggi / non scambiato / fermo). I 'fermi' (nessun ask, nessuno scambio nell'anno, es. strip IT0005498727 a 91,80 = 8%) sono esclusi da classifiche e lista di default. Salvati contratti, volumi e min/max annuo.
+- app v0.2.1: profili commissioni per banca nelle Impostazioni; run_daily v0.2.3: salvata 'Data stacco prima cedola' per la futura correzione prima cedola lunga/corta.

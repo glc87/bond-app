@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.2.2
+run_daily.py — v0.2.3
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -26,7 +26,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -115,6 +115,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
         "outstanding": s.outstanding,
         "maturity": maturity.isoformat() if maturity else None,
         "accrual_start": s.accrual_start.isoformat() if s.accrual_start else None,
+        "first_coupon_date": s.first_coupon_date.isoformat() if s.first_coupon_date else None,   # per la prima cedola lunga/corta (backlog)
         "coupon_annual": cpn,
         "coupon_frequency": freq,
         "coupon_frequency_label": s.coupon_frequency,
