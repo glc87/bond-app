@@ -1,5 +1,5 @@
 """
-yields.py — v0.1.1
+yields.py — v0.1.2
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -34,7 +34,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -306,8 +306,13 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     # --- YTM netto "convenzione Borsa Italiana": tassa cedole e rateo ma NON la plusvalenza.
     #     Verificato il 04/11/2026 sul BTP 3,1% Mz40: BI 4,21 vs questo calcolo 4,207 (il nostro 4,088).
     #     Serve SOLO come verifica incrociata del parser e dell'aliquota, non viene mostrato come dato.
-    flows_bi = [(0.0, -(price + acc_n))] + [(yf(d), per_net) for d in future] + [(yf(maturity), 100.0)]
-    ytm_bi_conv = irr(flows_bi)
+    #     ECCEZIONE zero coupon (verificata su 11 strip BTP il 04/11/2026, netto/lordo BI = 0,875):
+    #     lo scarto di emissione è "reddito di capitale" e BI lo tassa -> coincide con il nostro netto.
+    if kind == "zero":
+        ytm_bi_conv = ytm_n
+    else:
+        flows_bi = [(0.0, -(price + acc_n))] + [(yf(d), per_net) for d in future] + [(yf(maturity), 100.0)]
+        ytm_bi_conv = irr(flows_bi)
 
     # --- all-in sul nominale di riferimento
     N = max(costs.nominal, 0.0)

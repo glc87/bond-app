@@ -1,5 +1,5 @@
 """
-test_offline.py — v0.1.0
+test_offline.py — v0.1.1
 Test offline su pagine campione reali (fixtures/ prelevate il 04/11/2026).
 Esegui:  python scraper/test_offline.py
 """
@@ -56,6 +56,14 @@ def test_classify():
     assert y.classify("Kme Group Tf 5% St27 Call Eur", "Obbligazioni", "", "", 5.0, 2).kind == "callable"
     assert y.classify("Btp Valore Gn27 Eur", "Titoli di stato italiani", "", "", 4.0, 4).kind == "stepup"
     assert y.classify("Austria Tf 2,4% Mg34 Eur", "Titoli di stato esteri", "Plain Vanilla", "", 2.4, 1).computable
+
+
+def test_zero_coupon_bi_convention():
+    # Strip BTP Zc May29 (IT0001312807) al prezzo di riferimento 91,96 del 03/11/2026: BI lordo 3,42, netto 3,00
+    r = y.compute(91.96, "ref", date(2026, 11, 3), date(2029, 5, 1), 0.0, 0, 0.125, "zero", None, y.CostParams())
+    approx(r.ytm_gross * 100, 3.42, 0.015)
+    approx(r.ytm_net_bi_convention * 100, 3.00, 0.015)
+    assert r.ytm_net_bi_convention == r.ytm_net_tax
 
 
 def test_calendar():
