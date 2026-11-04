@@ -1,4 +1,4 @@
-/* app.js — v0.3.2 — Bond Netto (PWA) */
+/* app.js — v0.3.3 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
@@ -41,6 +41,8 @@
       b._years = b.maturity ? (Yields.parseISO(b.maturity) - trade) / 86400000 / 365 : null;
       b._price = b.price && b.price.used;
       b._calc = (b.computable && b._price) ? Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: trade, ...params() }) : null;
+      b._uncertain = uncertainReason(b);
+      b._strip = isStrip(b);
     }
   }
 
@@ -48,7 +50,7 @@
     const q = $("#q").value.trim().toLowerCase();
     const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value;
     const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value);
-    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, onlyReliable = $("#f-reliable").checked;
+    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
       if (state.cat !== "all" && b._cat !== state.cat) return false;
@@ -62,11 +64,12 @@
       if (!isNaN(nmin) && !(b._calc && b._calc.ytm_net_all != null && b._calc.ytm_net_all * 100 >= nmin)) return false;
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
-      if (onlyReliable && quality(b) === "stale") return false;
+      if (!showUncertain && b._uncertain) return false;
+      if (!showStrips && b._strip) return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", onlyReliable ? "" : 1, (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -101,6 +104,18 @@
   }
   const QUALITY_LABEL = { ask: "ask", traded: "rif · scambiato oggi", quiet: "rif · non scambiato oggi", stale: "prezzo fermo" };
   function reliable(b) { const q = quality(b); return q === "ask" || q === "traded"; }
+  function isStrip(b) { return /strip/i.test(b.name) || /strip/i.test(b.tipo_bond || ""); }
+  // "incerto": prezzo non affidabile, oppure verifica incrociata con Borsa Italiana non superata
+  function uncertainReason(b) {
+    const q = quality(b);
+    if (q === "stale") return "prezzo fermo: nessuna proposta in vendita e nessuno scambio nell'anno";
+    if (q === "quiet") return "nessuna proposta in vendita e nessuno scambio oggi: prezzo di riferimento forse non aggiornato";
+    const ck = b.check || {};
+    if (ck.ytm_gross_vs_bi != null && Math.abs(ck.ytm_gross_vs_bi) > 0.25 && b._years > 0.5) return `rendimento lordo scostato di ${fmtNum(ck.ytm_gross_vs_bi)} punti da quello di Borsa Italiana`;
+    if (ck.tax_rate_confirmed === false) return "aliquota fiscale non confermata dai dati di Borsa Italiana";
+    if ((b.anomalies || []).some(a => a.startsWith("cedola scheda"))) return "cedola della scheda non coerente con il nome del titolo";
+    return null;
+  }
   function priceBadge(b) {
     const q = quality(b);
     const cls = q === "ask" ? "ask" : q === "stale" ? "stale" : "ref";
@@ -110,7 +125,7 @@
   function cardHTML(b) {
     const c = b._calc;
     const cpn = b.kind === "zero" ? "zero coupon" : (b.coupon_annual != null ? `${fmtNum(b.coupon_annual)}% ${FREQ_LABEL[b.coupon_frequency] || ""}` : KIND_LABEL[b.kind]);
-    const minus = b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "";
+    const minus = (b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "") + (b._uncertain ? ' <span class="badge stale" title="' + esc(b._uncertain) + '">incerto</span>' : "") + (b._strip ? ' <span class="badge cur">strip</span>' : "");
     const sel = state.compare.has(b.isin);
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
@@ -185,7 +200,7 @@
 
   function renderBest() {
     const buckets = [["Fino a 2 anni", 0, 2], ["2–5 anni", 2, 5], ["5–10 anni", 5, 10], ["10–20 anni", 10, 20], ["Oltre 20 anni", 20, 1e9]];
-    const pool = state.filtered.filter(b => b._calc && b._calc.ytm_net_all != null && reliable(b));
+    const pool = state.filtered.filter(b => b._calc && b._calc.ytm_net_all != null && reliable(b) && !b._uncertain && !b._strip);
     $("#best").innerHTML = buckets.map(([label, lo, hi]) => {
       const top = pool.filter(b => b._years >= lo && b._years < hi).sort((a, b) => b._calc.ytm_net_all - a._calc.ytm_net_all).slice(0, 3);
       if (!top.length) return "";
@@ -223,7 +238,9 @@
       <tr><td>Rateo lordo BI</td><td>${fmtNum(bi.accrued_gross, 5)}</td></tr>
       <tr><td>Duration modificata</td><td>${fmtNum(bi.mod_duration)}</td></tr>
       <tr><td>Aliquota confermata dai dati BI</td><td class="${ck.tax_rate_confirmed === false ? "ko" : "ok"}">${ck.tax_rate_confirmed === false ? "NO, verificare" : ck.tax_rate_confirmed ? "sì" : "–"}</td></tr></table>` : "";
-    const anomalies = (b.anomalies || []).length ? `<div class="note">⚠ ${b.anomalies.map(esc).join("<br>")}</div>` : "";
+    const anomalies = (b._uncertain ? `<div class="note">⚠ <b>Titolo incerto</b>: ${esc(b._uncertain)}. Nascosto di default dalla lista.</div>` : "")
+      + (b._strip ? `<div class="note">ℹ <b>Strip</b>: cedola o mantello di un titolo di Stato "smontato", negoziato come zero coupon. Legittimo ma poco liquido, spread larghi, pochi scambi: nascosto di default.</div>` : "")
+      + ((b.anomalies || []).length ? `<div class="note">Note tecniche: ${b.anomalies.map(esc).join("<br>")}</div>` : "");
     const calc = b._calc ? `<div class="amount"><label>Importo nominale</label><input id="d-amount" type="number" step="${b.min_lot || 1000}" min="${b.min_lot || 1000}" value="${nominal}"> €</div>
       <div id="d-calc">${calcHTML(b, nominal)}</div>` : `<div class="note">Rendimento non calcolato: ${esc(b.not_computable_reason)}</div>`;
     return `${anomalies}${calc}<h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
@@ -320,7 +337,7 @@
   document.addEventListener("click", e => { if (e.target.closest(".cmp")) return; const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin); });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-reliable"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

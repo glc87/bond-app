@@ -26,3 +26,4 @@
 - app v0.3.x: confronto fianco a fianco (max 4), vista tabella su desktop, grafico storico nella scheda
   (serie per titolo in data/series/, generate da run_daily v0.3.0 dal 05/11), filtro valuta default EUR,
   dato principale = YTM netto all-in (il netto semplice gonfiava i titoli lunghi a forte sconto).
+- app v0.3.3: titoli 'incerti' (prezzo fermo/non aggiornato, verifica BI non superata) e strip nascosti di default, riattivabili nei filtri avanzati; badge e nota in scheda.

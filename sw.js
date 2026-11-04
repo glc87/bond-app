@@ -1,5 +1,5 @@
 /* sw.js — v0.1.0: cache dell'app shell; i dati vengono sempre richiesti in rete (fallback cache offline). */
-const SHELL = "bond-shell-v0.3.2";
+const SHELL = "bond-shell-v0.3.3";
 const ASSETS = ["./", "index.html", "app.css", "app.js", "yields.js", "manifest.webmanifest", "icon.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
