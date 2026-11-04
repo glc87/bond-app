@@ -1,0 +1,37 @@
+{
+  "run_at": "2026-11-04T13:42:57.453244+00:00",
+  "trade_date": "2026-11-04",
+  "versions": {
+    "run_daily": "0.1.0",
+    "borsa_italiana": "0.1.0",
+    "yields": "0.1.1"
+  },
+  "cost_params_default": {
+    "commission_pct": 0.0019,
+    "commission_min": 9.0,
+    "commission_max": 19.0,
+    "bollo_rate": 0.002,
+    "nominal": 10000.0
+  },
+  "n_total": 15,
+  "n_computable": 15,
+  "n_failed": 0,
+  "by_kind": {
+    "fixed": 4,
+    "zero": 11
+  },
+  "by_segment": {
+    "btp": 15
+  },
+  "by_currency": {
+    "EUR": 15
+  },
+  "price_source": {
+    "ask": 15
+  },
+  "n_with_anomalies": 0,
+  "n_tax_not_confirmed": 0,
+  "failed": [],
+  "requests": 129,
+  "duration_s": 212.0
+}
