@@ -12,3 +12,12 @@
   (BI tassa lo scarto di emissione degli ZC, non la plusvalenza dei titoli con cedola).
 - yields.py v0.1.3 / app.js v0.1.1: default commissioni 0,19% min 5 € max 19 € (verificati Fineco e ING); bollo 0,2% confermato anche sui BTP.
 - Workflow: rebase su origin/main prima del push (il primo run completo, 1820 titoli / 1449 calcolabili / 0 falliti in 94', aveva perso i dati per push rifiutato); delay 0,6 s.
+- Analisi del primo run completo (1820 titoli): correzioni v0.2.x
+  * scadenze a 2 cifre oltre il 2069 e 2117/2120 lette come 19xx/20xx: ora, se la data letta è passata, +100 anni
+  * titoli "Tf 0%" (61) trattati come zero coupon calcolabili
+  * indicizzati esteri (Oatei, Obligacionesei, Bundei, Btpi-) esclusi dal calcolo
+  * aliquota: agenzie (KfW, Rentenbank, CDP, AFD...) al 26% anche se BI le etichetta "stato esteri";
+    sovrani per nome; deduzione dai netti BI solo con segnale forte (gap >0,15), altrimenti "non discriminante"
+  * prima cedola corta: rateo ACT/ACT ICMA su periodo regolare e prima cedola ridotta (Schatz, Bund, UE nuove emissioni)
+  * verifica BI: per i "Tf 0%" convenzione "con cedola", per strip/BOT/Zc convenzione "scarto tassato"
+  * esito rielaborazione offline: 1486 calcolabili; 1342/1387 entro 0,02 dal YTM lordo BI

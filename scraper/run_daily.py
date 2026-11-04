@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.1.0
+run_daily.py — v0.2.1
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -26,7 +26,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.1.0"
+VERSION = "0.2.1"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -65,6 +65,13 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
     tax, tax_why = y.tax_rate_for(s.tipologia, s.issuer, s.guarantor)
     cls = y.classify(s.name, s.tipologia, s.structure, b.tipo_bond, cpn, freq)
 
+    # --- scadenza: BI scrive l'anno a 2 cifre ("Mz72" = 2072, "30/06/20" = 2120). Un titolo quotato
+    #     scade per forza nel futuro: se la data letta è passata, è il secolo sbagliato (+100 anni).
+    maturity = s.maturity or row.maturity
+    while maturity and maturity <= trade_date:
+        maturity = maturity.replace(year=maturity.year + 100)
+        anomalies.append(f"scadenza letta come {s.maturity}, corretta in {maturity} (anno a 2 cifre)")
+
     # --- prezzo: ask del book se presente, altrimenti riferimento, altrimenti ultimo
     ref = s.ref_price or b.ref_price
     if b.ask:
@@ -88,12 +95,12 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
         "structure": s.structure,
         "tipo_bond": b.tipo_bond,
         "kind": cls.kind,
-        "computable": cls.computable and price is not None and s.maturity is not None,
-        "not_computable_reason": cls.reason if not cls.computable else ("prezzo o scadenza mancanti" if (price is None or s.maturity is None) else ""),
+        "computable": cls.computable and price is not None and maturity is not None,
+        "not_computable_reason": cls.reason if not cls.computable else ("prezzo o scadenza mancanti" if (price is None or maturity is None) else ""),
         "currency": s.currency_trade or "",
         "min_lot": s.min_lot,
         "outstanding": s.outstanding,
-        "maturity": s.maturity.isoformat() if s.maturity else None,
+        "maturity": maturity.isoformat() if maturity else None,
         "accrual_start": s.accrual_start.isoformat() if s.accrual_start else None,
         "coupon_annual": cpn,
         "coupon_frequency": freq,
@@ -122,29 +129,44 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
 
     if rec["computable"]:
         try:
-            r = y.compute(price, src, trade_date, s.maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs)
-            rec["calc"] = y.result_to_dict(r)
-            # --- verifiche incrociate con Borsa Italiana (sul prezzo di riferimento, come fa BI)
             chk = {}
+            # --- verifiche incrociate con Borsa Italiana (sul prezzo di riferimento, come fa BI)
             if ref and s.bi_yield_gross is not None:
-                r_ref = y.compute(ref, "ref", s.ref_date or trade_date, s.maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs)
+                ref_date = s.ref_date or trade_date
+                true_zc = y.is_true_zero_coupon(s.name, b.tipo_bond, s.tipologia)
+                r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc)
                 if r_ref.ytm_gross is not None:
                     chk["ytm_gross_vs_bi"] = round(r_ref.ytm_gross * 100 - s.bi_yield_gross, 3)
-                if r_ref.ytm_net_bi_convention is not None and s.bi_yield_net is not None:
-                    chk["ytm_net_biconv_vs_bi"] = round(r_ref.ytm_net_bi_convention * 100 - s.bi_yield_net, 3)
-                    # aliquota dedotta: provo l'altra aliquota e vedo quale combacia meglio
-                    other = y.TAX_OTHER if tax == y.TAX_GOV else y.TAX_GOV
-                    r_oth = y.compute(ref, "ref", s.ref_date or trade_date, s.maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs)
-                    if r_oth.ytm_net_bi_convention is not None:
-                        d_mine = abs(r_ref.ytm_net_bi_convention * 100 - s.bi_yield_net)
-                        d_oth = abs(r_oth.ytm_net_bi_convention * 100 - s.bi_yield_net)
-                        chk["tax_rate_confirmed"] = d_mine <= d_oth
-                        if d_oth < d_mine:
-                            anomalies.append(f"aliquota {tax:.3f} NON confermata da BI: il {other:.3f} combacia meglio")
                 if s.bi_accrued_gross is not None:
                     chk["accrued_vs_bi"] = round(r_ref.accrued_gross - s.bi_accrued_gross, 5)
-                if chk.get("ytm_gross_vs_bi") is not None and abs(chk["ytm_gross_vs_bi"]) > 0.05:
+                if r_ref.ytm_net_bi_convention is not None and s.bi_yield_net is not None:
+                    chk["ytm_net_biconv_vs_bi"] = round(r_ref.ytm_net_bi_convention * 100 - s.bi_yield_net, 3)
+                    # Deduzione dell'aliquota dal netto pubblicato da BI: confronto le due ipotesi (12,5% e 26%).
+                    # Il segnale è utile solo se le due ipotesi distano abbastanza (titoli brevi a cedola bassa: no).
+                    other = y.TAX_OTHER if tax == y.TAX_GOV else y.TAX_GOV
+                    r_oth = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs, true_zc)
+                    if r_oth.ytm_net_bi_convention is not None:
+                        mine = r_ref.ytm_net_bi_convention * 100
+                        oth = r_oth.ytm_net_bi_convention * 100
+                        gap = abs(mine - oth)
+                        d_mine, d_oth = abs(mine - s.bi_yield_net), abs(oth - s.bi_yield_net)
+                        if gap < 0.15:
+                            chk["tax_rate_confirmed"] = None     # non discriminante
+                        elif d_mine <= d_oth:
+                            chk["tax_rate_confirmed"] = True
+                        else:
+                            chk["tax_rate_confirmed"] = False
+                            if d_oth < gap / 3:   # l'altra aliquota combacia chiaramente: la adotto
+                                anomalies.append(f"aliquota {tax:.3f} ({tax_why}) contraddetta da BI: adottata {other:.3f}")
+                                tax, tax_why = other, f"dedotta dai rendimenti netti di Borsa Italiana ({other*100:.1f}%)"
+                                rec["tax_rate"], rec["tax_reason"] = tax, tax_why
+                                chk["ytm_net_biconv_vs_bi"] = round(oth - s.bi_yield_net, 3)
+                            else:
+                                anomalies.append(f"aliquota {tax:.3f} non confermata da BI (nessuna delle due combacia bene)")
+                if chk.get("ytm_gross_vs_bi") is not None and abs(chk["ytm_gross_vs_bi"]) > 0.05 and r_ref.years_to_maturity > 0.5:
                     anomalies.append(f"YTM lordo scostato da BI di {chk['ytm_gross_vs_bi']}")
+            r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs)
+            rec["calc"] = y.result_to_dict(r)
             rec["check"] = chk
         except Exception as e:  # mai far cadere il run per un titolo
             rec["computable"] = False

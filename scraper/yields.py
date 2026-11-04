@@ -1,5 +1,5 @@
 """
-yields.py — v0.1.3
+yields.py — v0.2.1
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.1.3"
+VERSION = "0.2.1"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -125,7 +125,9 @@ def classify(name: str, tipologia: str, structure: str, tipo_bond: str,
     n = f" {name.lower()} "
     tb = (tipo_bond or "").lower()
     st = (structure or "").lower()
-    if any(k in n for k in [" btp italia", " btp€i", " btpi ", " btp i ", " oat€i", " oati ", "infl", "index", " ei "]) or "inflation" in st:
+    # indicizzati all'inflazione: BTP Italia, BTP€i/Btpi, OAT€i/Oatei, Bundei, Obligacionesei, ... (verificato su run 04/11/2026)
+    if (any(k in n for k in [" btp italia", " btp€i", " btpi ", " btpi-", " btp i ", " oat€i", " oatei", " oati ", " bundei", " bobl i", " obligacionesei", " bonosei", "infl", " index", " ei "])
+            or re.search(r"\b(btp|oat|bund|obligaciones|bonos|gilt|treasury)\s?(€i|ei|il|i)\b", n) or "inflation" in st or "linker" in n):
         return BondClass("inflation", False, "indicizzato all'inflazione: rendimento dipende dall'inflazione futura")
     if any(k in n for k in [" cct", " mc ", " fr ", " tv ", " float", " tm "]) or "floating" in tb or "variabile" in tb or "tv" in tb.split():
         return BondClass("floating", False, "tasso variabile: cedole future non note")
@@ -133,15 +135,25 @@ def classify(name: str, tipologia: str, structure: str, tipo_bond: str,
         return BondClass("stepup", False, "cedola step-up/strutturata: calcolo non supportato in questa fase")
     if " call" in n or "callable" in st or "callable" in tb:
         return BondClass("callable", False, "titolo richiamabile (call): rendimento a scadenza non garantito")
-    if " zc " in n or "zero" in tb or "zero" in st or " strip" in n or tipologia.lower().startswith("bot") or " bot" in n or (coupon_annual == 0 and freq == 0):
+    if " zc " in n or "zero" in tb or "zero" in st or " strip" in n or tipologia.lower().startswith("bot") or " bot " in n or " bot-" in n:
         return BondClass("zero", True, "")
-    if coupon_annual is None or coupon_annual <= 0:
+    if coupon_annual == 0 or " tf 0% " in n or " fx 0% " in n:
+        # cedola 0%: BI li classifica "con cedole" ma sono zero coupon di fatto (61 titoli nel run 04/11/2026)
+        return BondClass("zero", True, "")
+    if coupon_annual is None or coupon_annual < 0:
         if " tf " in n or "cedole tf" in tb:
             return BondClass("fixed", False, "tasso fisso ma cedola non leggibile dalla pagina")
         return BondClass("unknown", False, "tipologia non riconosciuta")
     if freq <= 0:
         return BondClass("fixed", False, "periodicità cedola non leggibile")
     return BondClass("fixed", True, "")
+
+
+def is_true_zero_coupon(name: str, tipo_bond: str, tipologia: str) -> bool:
+    """Strip, BOT, 'Zc' nel nome: emessi sotto la pari (scarto di emissione = reddito di capitale, BI lo tassa).
+    I 'Tf 0%' (Bund, Austria, KfW 0%) sono titoli con cedola zero: BI non tassa nulla nel suo netto."""
+    n = f" {name.lower()} "
+    return " zc " in n or " strip" in n or " bot " in n or " bot-" in n or tipologia.lower().startswith("bot") or "zero" in (tipo_bond or "").lower()
 
 
 def frequency_from_text(s: str) -> int:
@@ -159,11 +171,31 @@ def coupon_from_name(name: str) -> Optional[float]:
     return float(m.group(1).replace(",", ".")) if m else None
 
 
+# Agenzie e banche di sviluppo nazionali: NON equiparate ai titoli di Stato -> 26%
+# (verificato con i rendimenti netti di Borsa Italiana il 04/11/2026: KfW, Rentenbank, CDP, AFD al 26%)
+AGENCY_KEYS = ["KFW", "KREDITANSTALT", "RENTENBANK", "CASSA DEPOSITI", "CDP ", "AGENCE FSE", "AGENCE FRANCAISE", "AFD ", "CADES", "BNG ", "NWB ",
+               "UNEDIC", "BPIFRANCE", "ICO ", "INSTITUTO DE CREDITO", "OEKB", "KOMMUNALBANKEN", "KOMMUNEKREDIT", "MUNIFIN"]
+SOVEREIGN_KEYS = ["REPUBLIC", "REPUBBLICA", "KINGDOM", "BUNDESREPUBLIK", "FEDERAL REPUBLIC", "GOVERNMENT", "TREASURY",
+                  "MINISTERO", "MINISTRY", "STATE OF", "ESTADO", "ROYAUME", "REINO", "KONINKRIJK", "REPUBLIQUE", "HELLENIC",
+                  "IRELAND", "PORTUGAL", "FINLAND", "AUSTRIA", "BELGIUM", "FRANCE", "SPAIN", "ITALY", "NETHERLANDS", "SLOVAK", "SLOVENIA",
+                  "HUNGARY", "POLAND", "ROMANIA", "LITHUANIA", "LATVIA", "ESTONIA", "CYPRUS", "MALTA", "CROATIA", "BULGARIA",
+                  "CZECH", "DENMARK", "SWEDEN", "NORWAY", "SWITZERLAND", "UNITED KINGDOM", "CANADA", "AUSTRALIA", "NEW ZEALAND",
+                  "JAPAN", "UNITED STATES", "MEXICO", "BRAZIL", "TURKEY", "SOUTH AFRICA", "INDONESIA", "PHILIPPINES", "CHILE", "PERU", "COLOMBIA"]
+
+
 def tax_rate_for(tipologia: str, issuer: str, guarantor: str = "") -> tuple[float, str]:
     t = (tipologia or "").strip().lower()
-    if t in GOV_TIPOLOGIE:
-        return TAX_GOV, "titolo di Stato (12,5%)"
     up = f"{issuer} {guarantor}".upper()
+    for k in AGENCY_KEYS:
+        if k in up + " ":
+            return TAX_OTHER, f"agenzia non equiparata ({k.strip()}, 26%)"
+    if t in GOV_TIPOLOGIE or t == "eurobonds republic of italy":
+        if any(k in up for k in SOVEREIGN_KEYS):
+            return TAX_GOV, "titolo di Stato (12,5%)"
+        for k in SUPRANATIONAL_KEYS:
+            if re.search(rf"\b{re.escape(k)}\b", up):
+                return TAX_GOV, f"sovranazionale ({k}, 12,5%)"
+        return TAX_GOV, "classificato titolo di Stato estero da Borsa Italiana (12,5%, da confermare con i dati BI)"
     for k in SUPRANATIONAL_KEYS:
         if re.search(rf"\b{re.escape(k)}\b", up):
             return TAX_GOV, f"sovranazionale/equiparato ({k}, 12,5%)"
@@ -199,11 +231,26 @@ def coupon_schedule(maturity: date, freq: int, settle: date, accrual_start: Opti
     return dates, prev
 
 
+def notional_period_days(next_: date, freq: int) -> int:
+    """Lunghezza del periodo cedolare regolare che termina in next_ (ACT/ACT ICMA)."""
+    return (next_ - add_months(next_, -(12 // freq))).days
+
+
+def first_coupon_factor(prev: Optional[date], next_: Optional[date], freq: int, accrual_start: Optional[date]) -> float:
+    """Se il periodo in corso parte dal godimento (prima cedola corta/lunga), la prima cedola vale
+    (next - godimento) / periodo regolare. Altrimenti 1. (Schatz 3% Dec28: rateo BI 0,  nostro 1,04 prima del fix.)"""
+    if freq <= 0 or prev is None or next_ is None or accrual_start is None or prev != accrual_start:
+        return 1.0
+    return (next_ - prev).days / notional_period_days(next_, freq)
+
+
 def accrued_interest(coupon_annual: float, freq: int, settle: date, prev: Optional[date], next_: Optional[date]) -> float:
+    """ACT/ACT (ICMA): rateo = cedola periodale * giorni maturati / giorni del periodo REGOLARE.
+    Con prima cedola corta (prev = godimento) il denominatore resta il periodo regolare."""
     if freq <= 0 or prev is None or next_ is None or next_ <= prev:
         return 0.0
     per = coupon_annual / freq
-    return per * (settle - prev).days / (next_ - prev).days
+    return per * (settle - prev).days / notional_period_days(next_, freq)
 
 
 def irr(flows: list[tuple[float, float]], guess: float = 0.03) -> Optional[float]:
@@ -276,7 +323,9 @@ class YieldResult:
 
 def compute(price: float, price_source: str, trade_date: date, maturity: date,
             coupon_annual: float, freq: int, tax_rate: float, kind: str,
-            accrual_start: Optional[date], costs: CostParams) -> YieldResult:
+            accrual_start: Optional[date], costs: CostParams, bi_taxes_discount: bool = True) -> YieldResult:
+    """bi_taxes_discount: True per strip/BOT/Zc (BI tassa lo scarto nel suo netto), False per i "Tf 0%"
+    (BI li tratta come titoli con cedola: netto = lordo). Influenza SOLO ytm_net_bi_convention."""
     settle = settlement_date(trade_date)
     years = (maturity - settle).days / 365.0
     notes: list[str] = []
@@ -289,6 +338,9 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     acc_n = acc_g * (1 - tax_rate)
     per = coupon_annual / freq if freq else 0.0
     per_net = per * (1 - tax_rate)
+    f1 = first_coupon_factor(prev, next_, freq, accrual_start)   # prima cedola corta/lunga
+    def cpn_g(i: int) -> float: return per * (f1 if i == 0 else 1.0)
+    def cpn_n(i: int) -> float: return cpn_g(i) * (1 - tax_rate)
 
     gain = max(0.0, 100.0 - price)
     cg_tax = tax_rate * gain
@@ -299,11 +351,11 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
         return (d - settle).days / 365.0
 
     # --- YTM lordo (nessun costo, nessuna tassa): confrontabile con BI "lordo"
-    flows_g = [(0.0, -(price + acc_g))] + [(yf(d), per) for d in future] + [(yf(maturity), 100.0)]
+    flows_g = [(0.0, -(price + acc_g))] + [(yf(d), cpn_g(i)) for i, d in enumerate(future)] + [(yf(maturity), 100.0)]
     ytm_g = irr(flows_g)
 
     # --- YTM netto solo tasse (cedole, rateo E plusvalenza): il nostro dato
-    flows_n = [(0.0, -(price + acc_n))] + [(yf(d), per_net) for d in future] + [(yf(maturity), redemption_net)]
+    flows_n = [(0.0, -(price + acc_n))] + [(yf(d), cpn_n(i)) for i, d in enumerate(future)] + [(yf(maturity), redemption_net)]
     ytm_n = irr(flows_n)
 
     # --- YTM netto "convenzione Borsa Italiana": tassa cedole e rateo ma NON la plusvalenza.
@@ -311,10 +363,10 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     #     Serve SOLO come verifica incrociata del parser e dell'aliquota, non viene mostrato come dato.
     #     ECCEZIONE zero coupon (verificata su 11 strip BTP il 04/11/2026, netto/lordo BI = 0,875):
     #     lo scarto di emissione è "reddito di capitale" e BI lo tassa -> coincide con il nostro netto.
-    if kind == "zero":
+    if kind == "zero" and bi_taxes_discount:
         ytm_bi_conv = ytm_n
     else:
-        flows_bi = [(0.0, -(price + acc_n))] + [(yf(d), per_net) for d in future] + [(yf(maturity), 100.0)]
+        flows_bi = [(0.0, -(price + acc_n))] + [(yf(d), cpn_n(i)) for i, d in enumerate(future)] + [(yf(maturity), 100.0)]
         ytm_bi_conv = irr(flows_bi)
 
     # --- all-in sul nominale di riferimento
@@ -337,11 +389,11 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     bollo_total = -sum(cf for _, cf in bollo_flows)
 
     cost_total = (price + acc_n) / 100.0 * N + comm
-    coupons_net_total = per_net / 100.0 * N * len(future)
+    coupons_net_total = sum(cpn_n(i) for i in range(len(future))) / 100.0 * N
     redemption_eur = redemption_net / 100.0 * N
     net_gain = coupons_net_total + redemption_eur - cost_total - bollo_total
 
-    flows_all = ([(0.0, -cost_total)] + [(yf(d), per_net / 100.0 * N) for d in future]
+    flows_all = ([(0.0, -cost_total)] + [(yf(d), cpn_n(i) / 100.0 * N) for i, d in enumerate(future)]
                  + [(yf(maturity), redemption_eur)] + bollo_flows)
     ytm_all = irr(flows_all) if N > 0 else None
     simple_all = (net_gain / cost_total / years) if (cost_total > 0 and years > 0) else None

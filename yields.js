@@ -1,4 +1,4 @@
-/* yields.js — v0.1.0
+/* yields.js — v0.2.0
    Porting fedele di scraper/yields.py (compute) in JavaScript, per ricalcolare i
    rendimenti all-in nel browser con i parametri scelti dall'utente.
    Deve dare gli stessi numeri di Python a parità di input: vedi tools/check_js_vs_py.mjs. */
@@ -44,9 +44,15 @@
     dates.sort((a, b) => a - b);
     return { future: dates, prev };
   }
+  function notionalPeriodDays(next, freq) { return (next - addMonths(next, -(12 / freq))) / DAY; }
+  function firstCouponFactor(prev, next, freq, accrualStart) {
+    if (freq <= 0 || prev == null || next == null || accrualStart == null || prev !== accrualStart) return 1.0;
+    return ((next - prev) / DAY) / notionalPeriodDays(next, freq);
+  }
   function accrued(couponAnnual, freq, settle, prev, next) {
+    // ACT/ACT ICMA: denominatore = periodo cedolare regolare (anche con prima cedola corta)
     if (freq <= 0 || prev == null || next == null || next <= prev) return 0;
-    return (couponAnnual / freq) * ((settle - prev) / DAY) / ((next - prev) / DAY);
+    return (couponAnnual / freq) * ((settle - prev) / DAY) / notionalPeriodDays(next, freq);
   }
   function irr(flows, guess = 0.03) {
     const npv = r => flows.reduce((s, [t, cf]) => s + cf / Math.pow(1 + r, t), 0);
@@ -85,12 +91,14 @@
     const accG = accrued(couponAnnual, freq, settle, prev, next);
     const accN = accG * (1 - tax);
     const per = freq ? couponAnnual / freq : 0, perNet = per * (1 - tax);
+    const f1 = firstCouponFactor(prev, next, freq, accrualStart);
+    const cpnG = i => per * (i === 0 ? f1 : 1), cpnN = i => cpnG(i) * (1 - tax);
     const gain = Math.max(0, 100 - price), cgTax = tax * gain, minus = Math.max(0, price - 100);
     const redemptionNet = 100 - cgTax;
     const yf = d => (d - settle) / DAY / 365.0;
 
-    const flowsG = [[0, -(price + accG)], ...future.map(d => [yf(d), per]), [yf(maturity), 100]];
-    const flowsN = [[0, -(price + accN)], ...future.map(d => [yf(d), perNet]), [yf(maturity), redemptionNet]];
+    const flowsG = [[0, -(price + accG)], ...future.map((d, i) => [yf(d), cpnG(i)]), [yf(maturity), 100]];
+    const flowsN = [[0, -(price + accN)], ...future.map((d, i) => [yf(d), cpnN(i)]), [yf(maturity), redemptionNet]];
     const ytmG = irr(flowsG), ytmN = irr(flowsN);
 
     const N = Math.max(p.nominal, 0);
@@ -105,10 +113,10 @@
     if (frac > 0) bolloFlows.push([years, -avgVal * p.bolloRate * frac]);
     const bolloTotal = -bolloFlows.reduce((s, [, cf]) => s + cf, 0);
     const costTotal = (price + accN) / 100 * N + comm;
-    const couponsNetTotal = perNet / 100 * N * future.length;
+    const couponsNetTotal = future.reduce((sum, _, i) => sum + cpnN(i), 0) / 100 * N;
     const redemptionEur = redemptionNet / 100 * N;
     const netGain = couponsNetTotal + redemptionEur - costTotal - bolloTotal;
-    const flowsAll = [[0, -costTotal], ...future.map(d => [yf(d), perNet / 100 * N]), [yf(maturity), redemptionEur], ...bolloFlows];
+    const flowsAll = [[0, -costTotal], ...future.map((d, i) => [yf(d), cpnN(i) / 100 * N]), [yf(maturity), redemptionEur], ...bolloFlows];
     const ytmAll = N > 0 ? irr(flowsAll) : null;
     const simpleAll = (costTotal > 0 && years > 0) ? netGain / costTotal / years : null;
 
@@ -125,6 +133,6 @@
     };
   }
 
-  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.1.0" };
+  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.2.0" };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Yields = api;
 })(typeof window !== "undefined" ? window : globalThis);
