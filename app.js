@@ -1,8 +1,8 @@
-/* app.js — v0.6.0 — Bond Netto (PWA) */
+/* app.js — v0.6.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.6.0";
+  const APP_VERSION = "0.6.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -49,6 +49,11 @@
       b._years = b.maturity ? (Yields.parseISO(b.maturity) - trade) / 86400000 / 365 : null;
       b._price = b.price && b.price.used;
       b._calc = (b.computable && b._price) ? Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: trade, ...params() }) : null;
+      if (b._calc) {
+        const cpn = b.kind === "zero" ? 0 : (b.coupon_annual || 0);
+        b._calc.coupon_net_yield = b._price ? cpn * (1 - b.tax_rate) / b._price : null;                     // flusso netto annuo in tasca
+        b._calc.price_yield = (b._calc.ytm_net_all != null && b._calc.coupon_net_yield != null) ? b._calc.ytm_net_all - b._calc.coupon_net_yield : null;  // il resto: dal prezzo
+      }
       b._uncertain = uncertainReason(b);
       b._strip = isStrip(b);
     }
@@ -57,7 +62,7 @@
   function applyFilters() {
     const q = $("#q").value.trim().toLowerCase();
     const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value;
-    const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value);
+    const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value), cmin = parseFloat($("#f-cmin").value);
     const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
@@ -71,13 +76,14 @@
       if (!isNaN(ymax) && b._years != null && b._years > ymax) return false;
       if (!isNaN(nmin) && !(b._calc && b._calc.ytm_net_all != null && b._calc.ytm_net_all * 100 >= nmin)) return false;
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
+      if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
       if (!showUncertain && b._uncertain) return false;
       if (!showStrips && b._strip) return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -93,6 +99,7 @@
         case "price": return b._price;
         case "coupon": return b.coupon_annual;
         case "name": return b.name;
+        case "coupon_net_yield": case "price_yield": case "ytm_net_all": return b._calc ? b._calc[key] : null;
         default: return b._calc ? b._calc[key] : null;
       }
     };
@@ -142,8 +149,8 @@
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span></div>
-      <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto all-in</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
-      <div class="c-ytm">${c ? `<div><span class="lbl">Lordo</span>${fmtPct(c.ytm_gross)}</div><div><span class="lbl">Semplice</span>${fmtPct(c.simple_net_all)}</div>` : ""}</div>
+      <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto annuo</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
+      <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>` : ""}</div>
     </div>`;
   }
 
@@ -264,12 +271,11 @@
       : q === "quiet" ? `<div class="note">Nessuna proposta in vendita nel book e nessuno scambio oggi: calcolo sul prezzo di riferimento, che potrebbe non essere aggiornato.</div>`
       : q === "traded" ? `<div class="note">Nessuna proposta in vendita nel book al momento della rilevazione: calcolo sul prezzo di riferimento (titolo scambiato oggi).</div>` : "";
     return `<div class="kpis">
-      <div class="kpi"><div class="l">YTM netto all-in (tasse, commissioni, bollo)</div><div class="v good">${fmtPct(c.ytm_net_all)}</div></div>
-      <div class="kpi"><div class="l">Netto annuo semplice (senza reinvestimento)</div><div class="v">${fmtPct(c.simple_net_all)}</div></div>
-      <div class="kpi"><div class="l">YTM netto (solo tasse)</div><div class="v">${fmtPct(c.ytm_net_tax)}</div></div>
-      <div class="kpi"><div class="l">YTM lordo</div><div class="v">${fmtPct(c.ytm_gross)}</div></div>
+      <div class="kpi"><div class="l">Rendimento netto annuo (tasse, commissioni, bollo)</div><div class="v good">${fmtPct(c.ytm_net_all)}</div></div>
+      <div class="kpi"><div class="l">di cui da cedola (flusso netto / prezzo)</div><div class="v">${fmtPct(b._price ? (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - b.tax_rate) / b._price : null)}</div></div>
+      <div class="kpi"><div class="l">di cui da prezzo (a scadenza)</div><div class="v">${fmtPct(c.ytm_net_all != null && b._price ? c.ytm_net_all - (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - b.tax_rate) / b._price : null)}</div></div>
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)}</div></div>
-      ${b.kind !== "zero" ? `<div class="kpi"><div class="l">Rendimento immediato (cedola/prezzo)</div><div class="v">${fmtPct(c.current_yield_gross)}</div></div>` : ""}
+
     </div>${minus}${src}
     ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
     <h3>Flussi per ${nominal.toLocaleString("it-IT")} ${esc(b.currency)} nominali</h3><table class="kv">
@@ -280,7 +286,11 @@
       <tr><td>Cedole nette (${c.n_coupons} × ${fmtCur(c.coupon_net_per_period / 100 * nominal, b.currency)})${c.next_coupon_date ? `, prossima ${fmtDate(c.next_coupon_date)}` : ""}</td><td>${fmtCur(c.coupons_net_total_eur, b.currency)}</td></tr>
       <tr><td>Rimborso netto (tassa su plusvalenza ${fmtCur(c.capital_gain_tax_eur, b.currency)})</td><td>${fmtCur(c.redemption_net_eur, b.currency)}</td></tr>
       <tr><td>Imposta di bollo stimata (totale)</td><td>−${fmtCur(c.bollo_total_eur, b.currency)}</td></tr>
-      <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>`;
+      <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>
+    <h3>Altre misure (per confronto con altri siti)</h3><table class="kv">
+      <tr><td>YTM lordo (come Borsa Italiana)</td><td>${fmtPct(c.ytm_gross)}</td></tr>
+      <tr><td>YTM netto solo tasse (senza commissioni e bollo; tassa anche la plusvalenza, a differenza di BI)</td><td>${fmtPct(c.ytm_net_tax)}</td></tr>
+      <tr><td>Netto annuo semplice (guadagno totale ÷ costo ÷ anni, senza reinvestimento)</td><td>${fmtPct(c.simple_net_all)}</td></tr></table>`;
   }
 
   function seriesShard(isin) {   // identica a run_daily.series_shard
@@ -411,7 +421,7 @@
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

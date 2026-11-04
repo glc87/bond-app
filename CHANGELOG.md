@@ -40,3 +40,6 @@
   avvisi (regole su rendimento/prezzo per ISIN o filtro), valutati all'apertura; run_daily v0.5.0 valuta alerts.json nel
   repository e il workflow apre una Issue (email GitHub). Stessa semantica JS/Python verificata (25/25).
 - app v0.5.2: i clic su pulsanti e campi non aprono più la scheda del titolo.
+- app v0.6.1: un solo rendimento in evidenza (netto annuo all-in) con scomposizione "da cedola / da prezzo";
+  ordinamenti ridotti a rendimento netto, cedola netta, guadagno da prezzo, scadenza, prezzo, nome; filtro cedola netta min.
+  Le altre misure (YTM lordo, netto solo tasse, semplice) restano solo nella scheda per confronto con altri siti.
