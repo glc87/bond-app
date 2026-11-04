@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.4.1
+run_daily.py — v0.5.0
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -28,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -228,6 +228,66 @@ def update_series(out: Path, trade_date: date, hist: list, max_points: int = 150
         f.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
 
 
+def category_of(rec: dict) -> str:   # stessa logica di app.js category()
+    t = (rec.get("tipologia") or "").lower()
+    if t == "titoli di stato italiani": return "gov_it"
+    if t == "titoli di stato esteri": return "gov_fx"
+    if "sovranazionale" in (rec.get("tax_reason") or ""): return "supra"
+    return "other"
+
+
+def is_uncertain(rec: dict) -> bool:   # stessa logica di app.js uncertainReason() (senza anni: fatto a parte)
+    q = rec["price"].get("quality")
+    if q in ("stale", "quiet"): return True
+    ck = rec.get("check") or {}
+    if ck.get("ytm_gross_vs_bi") is not None and abs(ck["ytm_gross_vs_bi"]) > 0.25 and (rec.get("calc") or {}).get("years_to_maturity", 0) > 0.5: return True
+    if ck.get("tax_rate_confirmed") is False: return True
+    return any(a.startswith("cedola scheda") for a in rec.get("anomalies", []))
+
+
+def evaluate_alerts(rules: list, records: list) -> list:
+    """Stessa semantica di alerts.js matches(): ritorna [(regola, [record...]), ...] per le regole scattate."""
+    out = []
+    for r in rules:
+        hits = []
+        for b in records:
+            calc = b.get("calc") or {}
+            if r.get("isin"):
+                if b["isin"] != r["isin"].upper(): continue
+            else:
+                if not calc or is_uncertain(b) or "strip" in b["name"].lower(): continue
+                if r.get("cat") and category_of(b) != r["cat"]: continue
+                cur = r.get("currency") or "EUR"
+                if cur != "*" and b["currency"] != cur: continue
+                yrs = calc.get("years_to_maturity")
+                if r.get("ymin") is not None and not (yrs is not None and yrs >= r["ymin"]): continue
+                if r.get("ymax") is not None and not (yrs is not None and yrs <= r["ymax"]): continue
+            m = r.get("metric", "ytm_net_all")
+            v = b["price"]["used"] if m == "price" else calc.get(m)
+            if v is None: continue
+            x = v if m == "price" else v * 100
+            if (x >= r["value"]) if r.get("op", ">=") == ">=" else (x <= r["value"]):
+                hits.append(b)
+        if hits:
+            out.append((r, hits))
+    return out
+
+
+def alerts_report(fired: list, trade_date: date) -> str:
+    lines = [f"Avvisi scattati con i dati del {trade_date.isoformat()} (https://glc87.github.io/bond-app/)", ""]
+    for r, hits in fired:
+        scope = f"ISIN {r['isin']}" if r.get("isin") else f"{r.get('cat') or 'tutte le categorie'}, {r.get('currency') or 'EUR'}, {r.get('ymin') or 0}-{r.get('ymax') or '∞'} anni"
+        unit = "" if r.get("metric") == "price" else "%"
+        lines.append(f"### {r.get('metric','ytm_net_all')} {r.get('op','>=')} {r['value']}{unit} · {scope}" + (f" · {r['label']}" if r.get("label") else ""))
+        for b in sorted(hits, key=lambda b: -((b.get("calc") or {}).get("ytm_net_all") or 0))[:25]:
+            c = b.get("calc") or {}
+            lines.append(f"- {b['name']} ({b['isin']}): prezzo {b['price']['used']} [{b['price']['source']}], YTM netto all-in {((c.get('ytm_net_all') or 0)*100):.2f}%, scad. {b['maturity']}")
+        if len(hits) > 25:
+            lines.append(f"- … e altri {len(hits) - 25}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--segments", nargs="*", default=None, choices=list(bi.SEGMENTS))
@@ -302,6 +362,17 @@ def main(argv=None):
              "sn": (r["calc"] or {}).get("simple_net_all")} for r in records]
     (out / "history" / f"{trade_date.isoformat()}.json").write_text(json.dumps(hist, separators=(",", ":")), encoding="utf-8")
     update_series(out, trade_date, hist)
+    # --- avvisi (alerts.json nella root del repository, esportato dall'app)
+    alerts_file = ROOT / "alerts.json"
+    if alerts_file.exists():
+        try:
+            rules = json.loads(alerts_file.read_text(encoding="utf-8"))
+            fired = evaluate_alerts(rules, records)
+            (out / "alerts_fired.json").write_text(json.dumps({"trade_date": trade_date.isoformat(), "fired": [{"rule": r, "isins": [b["isin"] for b in h]} for r, h in fired]}, ensure_ascii=False), encoding="utf-8")
+            (out / "alerts_report.md").write_text(alerts_report(fired, trade_date) if fired else "", encoding="utf-8")
+            log.info("Avvisi: %d regole, %d scattate", len(rules), len(fired))
+        except Exception as e:
+            log.warning("alerts.json non valido: %s", e)
     log.info("Fatto: %d titoli, %d calcolabili, %d falliti, %d richieste in %.0fs",
              len(records), len(computable), len(failed), client.n_requests, meta["duration_s"])
     return 0

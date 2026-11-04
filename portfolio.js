@@ -1,4 +1,4 @@
-/* portfolio.js — v0.1.0 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
+/* portfolio.js — v0.2.0 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
 (() => {
   "use strict";
   const A = window.BondApp;             // helper esposti da app.js
@@ -9,8 +9,8 @@
 
   let pf = load();
   function load() {
-    try { const d = JSON.parse(localStorage.getItem(KEY) || "{}"); return { positions: d.positions || [], minus: d.minus || [] }; }
-    catch { return { positions: [], minus: [] }; }
+    try { const d = JSON.parse(localStorage.getItem(KEY) || "{}"); return { positions: d.positions || [], minus: d.minus || [], sales: d.sales || [] }; }
+    catch { return { positions: [], minus: [], sales: [] }; }
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(pf)); } catch {} }
 
@@ -70,7 +70,7 @@
             <div class="meta"><span>costo ${fmtCur(e.cost, e.cur)}</span><span>cedole incassate ${e.nReceived} (${fmtCur(e.couponsReceived, e.cur)})</span><span>latente ${e.unrealized >= 0 ? "+" : ""}${fmtCur(e.unrealized, e.cur)}</span>
               ${e.minusAtMaturity > 0 ? `<span class="ko">minus a scadenza ${fmtCur(e.minusAtMaturity, e.cur)}</span>` : `<span>guadagno netto a scadenza ${fmtCur(e.totalNetIfHeld, e.cur)}</span>`}</div></div>
           <div class="c-net"><div class="main">${fmtPct(e.atBuy.ytm_net_all)}</div><div class="small">netto all-in dal carico</div>
-            <div class="pos-actions"><button class="link" data-pf-edit="${e.p.id}">modifica</button> · <button class="link" data-pf-del="${e.p.id}">elimina</button></div></div>
+            <div class="pos-actions"><button class="link" data-pf-sell="${e.p.id}">vendi</button> · <button class="link" data-pf-edit="${e.p.id}">modifica</button> · <button class="link" data-pf-del="${e.p.id}">elimina</button></div></div>
         </div>`).join("") || `<p class="hint">Nessuna posizione. Aggiungi un titolo con il modulo qui sotto, oppure dal pulsante "Aggiungi al portafoglio" nella scheda di un titolo.</p>`;
 
     // calendario cedole 12 mesi
@@ -111,6 +111,14 @@
         <input name="date" type="date" required max="${todayISO()}">
         <input name="commission" type="number" step="any" min="0" placeholder="commissioni pagate">
         <button class="btn" type="submit">Salva</button></form>
+      <div id="sell-box" class="hidden"><h3>Vendita</h3>
+        <form id="sell-form" class="inline-form"><input type="hidden" name="posid"><span id="sell-title" class="hint" style="flex-basis:100%"></span>
+          <input name="nominal" type="number" step="any" min="1" placeholder="nominale venduto" required>
+          <input name="price" type="number" step="any" min="0.01" placeholder="prezzo di vendita" required>
+          <input name="date" type="date" required max="${todayISO()}">
+          <input name="commission" type="number" step="any" min="0" placeholder="commissioni">
+          <button class="btn" type="submit">Registra vendita</button> <button class="btn ghost" type="button" id="sell-cancel">Annulla</button></form></div>
+      ${salesHTML()}
       <h3>Cedole e rimborsi nei prossimi 12 mesi (netti)</h3>${cal}
       <h3>Zainetto fiscale</h3>${zain}
       <h3>Backup</h3><div class="row"><button class="btn ghost" id="pf-export">Esporta</button><label class="btn ghost">Importa <input type="file" id="pf-import" accept="application/json" hidden></label></div>
@@ -121,6 +129,30 @@
     for (const b of A.state.bonds) { const o = document.createElement("option"); o.value = b.isin; o.label = b.name; frag.appendChild(o); }
     dl.appendChild(frag);
     $("#portfolio").classList.remove("hidden");
+  }
+
+  function salesHTML() {
+    if (!pf.sales.length) return "";
+    const rows = pf.sales.slice().sort((a, b) => b.date.localeCompare(a.date)).map(sl => {
+      const b = bond(sl.isin); const cur = b ? b.currency : "EUR";
+      return `<tr><td>${fmtDate(sl.date)} · ${esc(b ? b.name : sl.isin)} · ${fmtCur(sl.nominal, cur)} a ${fmtNum(sl.price)} (carico ${fmtNum(sl.buyPrice)})</td>
+        <td class="${sl.realized >= 0 ? "ok" : "ko"}">${sl.realized >= 0 ? "+" : ""}${fmtCur(sl.realized, cur)}${sl.realized >= 0 ? ` <span class="small">tassa ${fmtCur(sl.tax, cur)}</span>` : " <span class=\"small\">→ zainetto</span>"} <button class="link" data-sale-del="${sl.id}">✕</button></td></tr>`; }).join("");
+    return `<h3>Vendite realizzate</h3><table class="kv">${rows}</table><p class="hint">Plus/minus sul corso secco, al netto delle commissioni. Le plusvalenze sono tassate (o compensate con lo zainetto, se capiente); le minusvalenze vengono aggiunte automaticamente allo zainetto.</p>`;
+  }
+
+  function registerSale(f) {
+    const p = pf.positions.find(x => x.id === f.elements.posid.value); if (!p) return;
+    const b = bond(p.isin); const nom = parseFloat(f.nominal.value), price = parseFloat(f.price.value), comm = parseFloat(f.commission.value) || 0;
+    if (nom > p.nominal + 1e-9) { alert(`Puoi vendere al massimo ${p.nominal}.`); return; }
+    const share = nom / p.nominal;
+    const realized = (price - p.price) / 100 * nom - comm - (p.commission || 0) * share;   // redditi diversi: prezzo - carico, al netto costi
+    const tax = realized > 0 ? realized * (b ? b.tax_rate : 0.26) : 0;
+    const sale = { id: uid(), posId: p.id, isin: p.isin, nominal: nom, price, date: f.date.value, commission: comm, buyPrice: p.price, realized, tax };
+    pf.sales.push(sale);
+    if (realized < 0) pf.minus.push({ id: "sale-" + sale.id, label: `vendita ${b ? b.name : p.isin}`, amount: -realized, year: parseInt(sale.date.slice(0, 4), 10) });
+    p.nominal -= nom; p.commission = (p.commission || 0) * (1 - share);
+    if (p.nominal <= 1e-9) pf.positions = pf.positions.filter(x => x.id !== p.id);
+    save(); open();
   }
 
   function prefill(p) {
@@ -142,6 +174,7 @@
       const i = pf.positions.findIndex(p => p.id === pos.id); if (i >= 0) pf.positions[i] = pos; else pf.positions.push(pos);
       save(); open();
     }
+    if (e.target.getAttribute("id") === "sell-form") { e.preventDefault(); registerSale(e.target); }
     if (e.target.getAttribute("id") === "minus-form") {
       e.preventDefault(); const f = e.target;
       pf.minus.push({ id: uid(), label: f.label.value.trim(), amount: parseFloat(f.amount.value), year: parseInt(f.year.value, 10) }); save(); open();
@@ -150,6 +183,11 @@
   document.addEventListener("click", e => {
     const del = e.target.closest("[data-pf-del]"); if (del) { if (confirm("Eliminare la posizione?")) { pf.positions = pf.positions.filter(p => p.id !== del.dataset.pfDel); save(); open(); } return; }
     const ed = e.target.closest("[data-pf-edit]"); if (ed) { prefill(pf.positions.find(p => p.id === ed.dataset.pfEdit) || {}); return; }
+    const sl = e.target.closest("[data-pf-sell]"); if (sl) { const p = pf.positions.find(x => x.id === sl.dataset.pfSell); const b = bond(p.isin);
+      $("#sell-box").classList.remove("hidden"); const f = $("#sell-form"); f.elements.posid.value = p.id; f.nominal.value = p.nominal; f.price.value = b ? b._price : ""; f.date.value = todayISO(); f.commission.value = "";
+      $("#sell-title").textContent = `${b ? b.name : p.isin} — in portafoglio ${p.nominal} nominali a ${fmtNum(p.price)}`; f.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (e.target.id === "sell-cancel") { $("#sell-box").classList.add("hidden"); return; }
+    const sd = e.target.closest("[data-sale-del]"); if (sd) { if (confirm("Eliminare la vendita? La posizione NON viene ripristinata e l'eventuale minus resta nello zainetto (eliminala a parte).")) { pf.sales = pf.sales.filter(x => x.id !== sd.dataset.saleDel); save(); open(); } return; }
     const md = e.target.closest("[data-minus-del]"); if (md) { pf.minus = pf.minus.filter(m => m.id !== md.dataset.minusDel); save(); open(); return; }
     const add = e.target.closest("[data-pf-add]"); if (add) { const b = bond(add.dataset.pfAdd); $("#detail").classList.add("hidden"); open(); prefill({ isin: b.isin, price: b._price, nominal: Math.max(A.state.settings.nominal, b.min_lot || 0) }); return; }
     if (e.target.id === "pf-export") {
@@ -159,7 +197,7 @@
   });
   document.addEventListener("change", e => {
     if (e.target.id === "pf-import" && e.target.files[0]) {
-      const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!Array.isArray(d.positions)) throw 0; pf = { positions: d.positions, minus: d.minus || [] }; save(); open(); } catch { alert("File non valido."); } }; r.readAsText(e.target.files[0]);
+      const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); if (!Array.isArray(d.positions)) throw 0; pf = { positions: d.positions, minus: d.minus || [], sales: d.sales || [] }; save(); open(); } catch { alert("File non valido."); } }; r.readAsText(e.target.files[0]);
     }
   });
   $("#btn-pf").addEventListener("click", open);

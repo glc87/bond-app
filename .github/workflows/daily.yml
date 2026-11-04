@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: daily-bonds
@@ -51,6 +52,19 @@ jobs:
           for k in ['trade_date','n_total','n_computable','n_failed','n_with_anomalies','n_tax_not_confirmed','requests','duration_s','price_source','by_kind','by_currency']:
               print(f"- **{k}**: `{m.get(k)}`")
           PY
+
+      - name: Avvisi -> Issue (email)
+        if: hashFiles('data/alerts_report.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s data/alerts_report.md ]; then
+            TITLE="Avvisi bond del $(date -u +%Y-%m-%d)"
+            gh issue create --title "$TITLE" --body-file data/alerts_report.md --label avvisi 2>/dev/null \
+              || gh issue create --title "$TITLE" --body-file data/alerts_report.md
+          else
+            echo "Nessun avviso scattato"
+          fi
 
       - name: Commit dei dati
         run: |

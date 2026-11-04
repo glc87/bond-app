@@ -36,3 +36,7 @@
 - Deploy Pages delle 19:41 fallito per timeout (rilanciato). run_daily v0.4.1: serie storiche in 64 file (hash ISIN, stessa
   formula in app.js) invece di uno per titolo. app v0.5.1: tasto copia ISIN nella scheda; sw.js v0.2.0 rete-prima
   (gli aggiornamenti arrivano al primo refresh, cache solo offline).
+- portfolio.js v0.2.0: vendite parziali con plus/minus realizzate (minus -> zainetto automatico). app v0.6.0 / alerts.js v0.1.0:
+  avvisi (regole su rendimento/prezzo per ISIN o filtro), valutati all'apertura; run_daily v0.5.0 valuta alerts.json nel
+  repository e il workflow apre una Issue (email GitHub). Stessa semantica JS/Python verificata (25/25).
+- app v0.5.2: i clic su pulsanti e campi non aprono più la scheda del titolo.

@@ -1,8 +1,8 @@
-/* app.js — v0.5.1 — Bond Netto (PWA) */
+/* app.js — v0.6.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.5.1";
+  const APP_VERSION = "0.6.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -397,6 +397,7 @@
   document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.add("hidden"); }));
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); });
   document.addEventListener("click", async e => {
+    const lk = e.target.closest("button.link[data-isin], .lnk[data-isin]"); if (lk) { openDetail(lk.dataset.isin); return; }
     const cp = e.target.closest("[data-copy]");
     if (cp) {
       const txt = cp.dataset.copy; let ok = false;
@@ -405,7 +406,8 @@
       const old = cp.textContent; cp.textContent = ok ? "✓ copiato" : "non riuscito"; setTimeout(() => { cp.textContent = old; }, 1500);
       return;
     }
-    if (e.target.closest(".cmp")) return; const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin);
+    if (e.target.closest(".cmp, button, a, input, label, form")) return;   // pulsanti e campi non aprono la scheda
+    const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin);
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
@@ -430,6 +432,7 @@
       const runAt = new Date(d.meta.run_at);
       $("#meta").textContent = `${d.meta.n_total} titoli MOT · rilevazione ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} con rendimento`;
       applyFilters();
+      if (window.BondAlerts) BondAlerts.evaluateAll();
     } catch (e) {
       $("#meta").textContent = "Dati non disponibili: " + e.message;
     }

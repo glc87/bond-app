@@ -1,7 +1,7 @@
 /* sw.js — v0.2.0: RETE PRIMA per l'app (così gli aggiornamenti arrivano subito), cache solo come fallback offline.
    I dati (data/) idem: rete, con copia in cache per l'uso offline. */
-const SHELL = "bond-shell-v0.5.1";
-const ASSETS = ["./", "index.html", "app.css", "app.js", "yields.js", "portfolio.js", "manifest.webmanifest", "icon.svg"];
+const SHELL = "bond-shell-v0.6.0";
+const ASSETS = ["./", "index.html", "app.css", "app.js", "yields.js", "portfolio.js", "alerts.js", "manifest.webmanifest", "icon.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== SHELL && k !== "bond-data").map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", e => {
