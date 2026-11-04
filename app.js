@@ -1,4 +1,4 @@
-/* app.js — v0.2.1 — Bond Netto (PWA) */
+/* app.js — v0.3.2 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
@@ -10,7 +10,7 @@
   const fmtDate = s => s ? new Date(s).toLocaleDateString("it-IT") : "–";
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  const state = { meta: null, bonds: [], settings: loadSettings(), cat: "all", shown: PAGE, filtered: [] };
+  const state = { meta: null, bonds: [], settings: loadSettings(), cat: "all", shown: PAGE, filtered: [], compare: new Set() };
 
   function loadSettings() {
     try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("bond-settings") || "{}") }; } catch { return { ...DEFAULTS }; }
@@ -59,14 +59,14 @@
       if ((kind === "fixed" || kind === "zero") && !(b._calc && b.kind === kind)) return false;
       if (!isNaN(ymin) && b._years != null && b._years < ymin) return false;
       if (!isNaN(ymax) && b._years != null && b._years > ymax) return false;
-      if (!isNaN(nmin) && !(b._calc && b._calc.simple_net_all != null && b._calc.simple_net_all * 100 >= nmin)) return false;
+      if (!isNaN(nmin) && !(b._calc && b._calc.ytm_net_all != null && b._calc.ytm_net_all * 100 >= nmin)) return false;
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
       if (onlyReliable && quality(b) === "stale") return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur, country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", onlyReliable ? "" : 1, (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", onlyReliable ? "" : 1, (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -96,7 +96,8 @@
   function quality(b) {
     const q = b.price.quality;
     if (q) return q;
-    return b.price.source === "ask" ? "ask" : "quiet";   // dati vecchi senza il campo
+    // dati senza il campo (run precedenti al 05/11/2026): ask -> affidabile; scambiato oggi -> ok; altrimenti fermo
+    return b.price.source === "ask" ? "ask" : (b.price.last_time ? "traded" : "stale");
   }
   const QUALITY_LABEL = { ask: "ask", traded: "rif · scambiato oggi", quiet: "rif · non scambiato oggi", stale: "prezzo fermo" };
   function reliable(b) { const q = quality(b); return q === "ask" || q === "traded"; }
@@ -109,17 +110,18 @@
   function cardHTML(b) {
     const c = b._calc;
     const cpn = b.kind === "zero" ? "zero coupon" : (b.coupon_annual != null ? `${fmtNum(b.coupon_annual)}% ${FREQ_LABEL[b.coupon_frequency] || ""}` : KIND_LABEL[b.kind]);
-    const main = c ? `<div class="main">${fmtPct(c.simple_net_all)}</div><div class="small">YTM netto ${fmtPct(c.ytm_net_tax)} · lordo ${fmtPct(c.ytm_gross)}</div>`
-      : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`;
     const minus = b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "";
-    return `<div class="card" data-isin="${b.isin}">
-      <div>
-        <div class="name">${esc(b.name)} ${minus}</div>
-        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span></div>
-        <div class="meta"><span>scad. ${fmtDate(b.maturity)} (${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span><span>${cpn}</span>
-          <span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span></span>${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtEur(b.min_lot)}</span>` : ""}</div>
-      </div>
-      <div class="yield">${main}</div></div>`;
+    const sel = state.compare.has(b.isin);
+    return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
+      <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
+      <div class="c-name"><div class="name">${esc(b.name)} ${minus}</div>
+        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtEur(b.min_lot)}</span>` : ""}</div></div>
+      <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
+      <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
+      <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span></div>
+      <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto all-in</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
+      <div class="c-ytm">${c ? `<div><span class="lbl">Lordo</span>${fmtPct(c.ytm_gross)}</div><div><span class="lbl">Semplice</span>${fmtPct(c.simple_net_all)}</div>` : ""}</div>
+    </div>`;
   }
 
   function render() {
@@ -129,15 +131,65 @@
     $("#count").textContent = `${state.filtered.length} titoli`;
     $("#more-btn").classList.toggle("hidden", state.shown >= state.filtered.length);
     renderBest();
+    renderCompareBar();
   }
+
+  function renderCompareBar() {
+    const n = state.compare.size;
+    $("#cmp-bar").classList.toggle("hidden", n === 0);
+    $("#cmp-count").textContent = n;
+    $("#cmp-open").disabled = n < 2;
+  }
+
+  // ---------------- confronto ----------------
+  function openCompare() {
+    const bonds = [...state.compare].map(i => state.bonds.find(b => b.isin === i)).filter(Boolean);
+    if (bonds.length < 2) return;
+    const nominal = state.settings.nominal;
+    const calcs = bonds.map(b => b._calc ? Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: Yields.parseISO(state.meta.trade_date), ...params(Math.max(nominal, b.min_lot || 0)) }) : null);
+    const rows = [
+      ["Scadenza", b => `${fmtDate(b.maturity)}<br><span class="small">${fmtNum(b._years, 1)} anni</span>`],
+      ["Cedola", b => b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% ${FREQ_LABEL[b.coupon_frequency] || ""}`],
+      ["Prezzo", b => `${fmtNum(b._price)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>`],
+      ["Aliquota", b => `${fmtNum(b.tax_rate * 100, 1)}%`],
+      ["Netto annuo (all-in)", (b, c) => c ? `<b class="ok">${fmtPct(c.simple_net_all)}</b>` : "n.d."],
+      ["YTM netto all-in", (b, c) => c ? fmtPct(c.ytm_net_all) : "n.d."],
+      ["YTM netto (solo tasse)", (b, c) => c ? fmtPct(c.ytm_net_tax) : "n.d."],
+      ["YTM lordo", (b, c) => c ? fmtPct(c.ytm_gross) : "n.d."],
+      ["Rendimento immediato", (b, c) => c && b.kind !== "zero" ? fmtPct(c.current_yield_gross) : "–"],
+      ["Esborso oggi", (b, c) => c ? `${fmtEur(c.cost_total_eur)}<br><span class="small">su ${fmtEur(c.nominal)} nominali</span>` : "–"],
+      ["Cedole nette totali", (b, c) => c ? fmtEur(c.coupons_net_total_eur) : "–"],
+      ["Guadagno netto a scadenza", (b, c) => c ? `<b>${fmtEur(c.net_gain_total_eur)}</b>` : "–"],
+      ["Minusvalenza a scadenza", (b, c) => c && c.minus_eur > 0 ? `<span class="ko">${fmtEur(c.minus_eur)}</span>` : "–"],
+      ["Duration modificata (BI)", b => fmtNum(b.bi.mod_duration)],
+      ["Lotto minimo", b => fmtEur(b.min_lot)],
+    ];
+    $("#cmp-body").innerHTML = `<div class="cmp-scroll"><table class="cmp"><thead><tr><th></th>${bonds.map(b => `<th><div class="name">${esc(b.name)}</div><div class="small">${esc(b.isin)}</div><button class="link" data-isin="${b.isin}">scheda</button> · <button class="link" data-uncmp="${b.isin}">togli</button></th>`).join("")}</tr></thead>
+      <tbody>${rows.map(([l, f]) => `<tr><td>${l}</td>${bonds.map((b, i) => `<td>${f(b, calcs[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <p class="hint">Importi calcolati sul nominale di riferimento delle Impostazioni (o sul lotto minimo se maggiore).</p>`;
+    $("#compare").classList.remove("hidden");
+  }
+  $("#cmp-open").addEventListener("click", openCompare);
+  $("#cmp-clear").addEventListener("click", () => { state.compare.clear(); render(); });
+  document.addEventListener("change", e => {
+    const cb = e.target.closest("[data-cmp]"); if (!cb) return;
+    if (cb.checked) { if (state.compare.size >= 4) { cb.checked = false; alert("Puoi confrontare al massimo 4 titoli."); return; } state.compare.add(cb.dataset.cmp); }
+    else state.compare.delete(cb.dataset.cmp);
+    cb.closest(".card").classList.toggle("sel", cb.checked); renderCompareBar();
+  });
+  document.addEventListener("click", e => {
+    const u = e.target.closest("[data-uncmp]"); if (!u) return;
+    state.compare.delete(u.dataset.uncmp); render();
+    if (state.compare.size >= 2) openCompare(); else $("#compare").classList.add("hidden");
+  });
 
   function renderBest() {
     const buckets = [["Fino a 2 anni", 0, 2], ["2–5 anni", 2, 5], ["5–10 anni", 5, 10], ["10–20 anni", 10, 20], ["Oltre 20 anni", 20, 1e9]];
-    const pool = state.filtered.filter(b => b._calc && b._calc.simple_net_all != null && reliable(b));
+    const pool = state.filtered.filter(b => b._calc && b._calc.ytm_net_all != null && reliable(b));
     $("#best").innerHTML = buckets.map(([label, lo, hi]) => {
-      const top = pool.filter(b => b._years >= lo && b._years < hi).sort((a, b) => b._calc.simple_net_all - a._calc.simple_net_all).slice(0, 3);
+      const top = pool.filter(b => b._years >= lo && b._years < hi).sort((a, b) => b._calc.ytm_net_all - a._calc.ytm_net_all).slice(0, 3);
       if (!top.length) return "";
-      return `<div class="bucket"><h4>${label}</h4>${top.map(b => `<div class="b-row" data-isin="${b.isin}"><span title="${esc(b.name)}">${esc(b.name)}</span><b>${fmtPct(b._calc.simple_net_all)}</b></div>`).join("")}</div>`;
+      return `<div class="bucket"><h4>${label}</h4>${top.map(b => `<div class="b-row" data-isin="${b.isin}"><span title="${esc(b.name)}">${esc(b.name)}</span><b>${fmtPct(b._calc.ytm_net_all)}</b></div>`).join("")}</div>`;
     }).join("");
   }
 
@@ -149,6 +201,7 @@
     const nominalDefault = Math.max(state.settings.nominal, b.min_lot || 0);
     $("#d-body").innerHTML = detailHTML(b, nominalDefault);
     $("#detail").classList.remove("hidden");
+    loadChart(b);
     const inp = $("#d-amount");
     if (inp) inp.addEventListener("input", () => { const n = parseFloat(inp.value); if (n > 0) $("#d-calc").innerHTML = calcHTML(b, n); });
   }
@@ -173,7 +226,7 @@
     const anomalies = (b.anomalies || []).length ? `<div class="note">⚠ ${b.anomalies.map(esc).join("<br>")}</div>` : "";
     const calc = b._calc ? `<div class="amount"><label>Importo nominale</label><input id="d-amount" type="number" step="${b.min_lot || 1000}" min="${b.min_lot || 1000}" value="${nominal}"> €</div>
       <div id="d-calc">${calcHTML(b, nominal)}</div>` : `<div class="note">Rendimento non calcolato: ${esc(b.not_computable_reason)}</div>`;
-    return `${anomalies}${calc}<h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
+    return `${anomalies}${calc}<h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
       <p class="hint" style="margin-top:12px"><a href="${esc(b.scheda_url)}" target="_blank" rel="noopener">Scheda su Borsa Italiana ↗</a></p>`;
   }
 
@@ -185,8 +238,8 @@
       : q === "quiet" ? `<div class="note">Nessuna proposta in vendita nel book e nessuno scambio oggi: calcolo sul prezzo di riferimento, che potrebbe non essere aggiornato.</div>`
       : q === "traded" ? `<div class="note">Nessuna proposta in vendita nel book al momento della rilevazione: calcolo sul prezzo di riferimento (titolo scambiato oggi).</div>` : "";
     return `<div class="kpis">
-      <div class="kpi"><div class="l">Netto annuo (all-in, senza reinvestimento)</div><div class="v good">${fmtPct(c.simple_net_all)}</div></div>
-      <div class="kpi"><div class="l">YTM netto all-in</div><div class="v">${fmtPct(c.ytm_net_all)}</div></div>
+      <div class="kpi"><div class="l">YTM netto all-in (tasse, commissioni, bollo)</div><div class="v good">${fmtPct(c.ytm_net_all)}</div></div>
+      <div class="kpi"><div class="l">Netto annuo semplice (senza reinvestimento)</div><div class="v">${fmtPct(c.simple_net_all)}</div></div>
       <div class="kpi"><div class="l">YTM netto (solo tasse)</div><div class="v">${fmtPct(c.ytm_net_tax)}</div></div>
       <div class="kpi"><div class="l">YTM lordo</div><div class="v">${fmtPct(c.ytm_gross)}</div></div>
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtEur(c.net_gain_total_eur)}</div></div>
@@ -201,6 +254,33 @@
       <tr><td>Rimborso netto (tassa su plusvalenza ${fmtEur(c.capital_gain_tax_eur)})</td><td>${fmtEur(c.redemption_net_eur)}</td></tr>
       <tr><td>Imposta di bollo stimata (totale)</td><td>−${fmtEur(c.bollo_total_eur)}</td></tr>
       <tr><td><b>Guadagno netto</b></td><td><b>${fmtEur(c.net_gain_total_eur)}</b></td></tr></table>`;
+  }
+
+  async function loadChart(b) {
+    const el = $("#d-chart"); if (!el) return;
+    let pts = [];
+    try { const r = await fetch(`data/series/${b.isin}.json`, { cache: "no-cache" }); if (r.ok) pts = await r.json(); } catch {}
+    if (!el.isConnected) return;
+    pts = pts.filter(p => p[3] != null);
+    if (pts.length < 2) { el.innerHTML = `<span class="hint">Lo storico si costruisce un punto al giorno dagli aggiornamenti: ${pts.length === 1 ? "oggi c'è il primo punto" : "disponibile dal prossimo aggiornamento"}.</span>`; return; }
+    el.innerHTML = lineChart(pts);
+  }
+
+  function lineChart(pts) {
+    const W = 640, H = 220, L = 44, R = 12, T = 12, B = 28;
+    const series = [["YTM lordo", pts.map(p => p[2]), "var(--muted)"], ["YTM netto", pts.map(p => p[3]), "var(--accent)"], ["Netto annuo", pts.map(p => p[4]), "var(--good)"]];
+    const all = series.flatMap(s => s[1]).filter(v => v != null);
+    let lo = Math.min(...all), hi = Math.max(...all); const pad = Math.max((hi - lo) * 0.1, 0.0005); lo -= pad; hi += pad;
+    const x = i => L + (W - L - R) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
+    const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    const ticks = 4; let grid = "";
+    for (let k = 0; k <= ticks; k++) { const v = lo + (hi - lo) * k / ticks; grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${(v * 100).toFixed(2)}%</text>`; }
+    const lines = series.map(([n, vals, col]) => `<polyline fill="none" stroke="${col}" stroke-width="2" points="${vals.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean).join(" ")}"/>`).join("");
+    const first = pts[0][0], last = pts[pts.length - 1][0];
+    const legend = series.map(([n, , col]) => `<span><i style="background:${col}"></i>${n}</span>`).join("");
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Storico rendimenti">${grid}${lines}
+      <text x="${L}" y="${H - 8}" font-size="11" fill="var(--muted)">${fmtDate(first)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end" font-size="11" fill="var(--muted)">${fmtDate(last)}</text></svg>
+      <div class="legend">${legend}<span class="hint">${pts.length} rilevazioni</span></div>`;
   }
 
   // ---------------- impostazioni ----------------
@@ -237,7 +317,7 @@
   document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", e => e.target.closest(".modal").classList.add("hidden")));
   document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.add("hidden"); }));
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); });
-  document.addEventListener("click", e => { const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin); });
+  document.addEventListener("click", e => { if (e.target.closest(".cmp")) return; const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin); });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
   ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-reliable"].forEach(id => $(id).addEventListener("input", applyFilters));
@@ -255,6 +335,9 @@
       const opts = (sel, vals) => { const s = $(sel); vals.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; s.appendChild(o); }); };
       opts("#f-cur", [...new Set(state.bonds.map(b => b.currency).filter(Boolean))].sort());
       opts("#f-country", [...new Set(state.bonds.map(b => b.country).filter(Boolean))].sort());
+      // default: solo EUR. I rendimenti in TRY/BRL/MXN sono "veri" nella loro valuta ma privi di senso in euro
+      // (la valuta si svaluta quanto rende): finché manca la conversione in EUR, le altre valute vanno scelte apposta.
+      if ([...$("#f-cur").options].some(o => o.value === "EUR")) $("#f-cur").value = "EUR";
       const runAt = new Date(d.meta.run_at);
       $("#meta").textContent = `${d.meta.n_total} titoli MOT · rilevazione ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} con rendimento`;
       applyFilters();

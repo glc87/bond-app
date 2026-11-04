@@ -33,7 +33,7 @@
     <details class="more">
       <summary>Filtri avanzati <span id="filter-count"></span></summary>
       <div class="grid">
-        <label>Valuta <select id="f-cur"><option value="">Tutte</option></select></label>
+        <label>Valuta (default EUR: in altre valute il rendimento non tiene conto del cambio) <select id="f-cur"><option value="">Tutte</option></select></label>
         <label>Paese <select id="f-country"><option value="">Tutti</option></select></label>
         <label>Tipo <select id="f-kind">
           <option value="computable">Calcolabili (fisso e zero coupon)</option>
@@ -43,7 +43,7 @@
         </select></label>
         <label>Scadenza min (anni) <input id="f-ymin" type="number" min="0" step="0.5" value="1"></label>
         <label>Scadenza max (anni) <input id="f-ymax" type="number" min="0" step="1" placeholder="∞"></label>
-        <label>Netto annuo min % <input id="f-nmin" type="number" step="0.1" placeholder="es. 3"></label>
+        <label>Netto all-in min % <input id="f-nmin" type="number" step="0.1" placeholder="es. 3"></label>
         <label>Lotto minimo max € <input id="f-lot" type="number" step="1000" placeholder="es. 1000"></label>
         <label class="check"><input id="f-reliable" type="checkbox" checked> Escludi prezzi fermi (titoli mai scambiati)</label>
         <label class="check"><input id="f-ask" type="checkbox"> Solo con prezzo ask reale</label>
@@ -58,8 +58,9 @@
     <div class="results-head">
       <span id="count"></span>
       <label>Ordina <select id="sort">
-        <option value="simple_net_all:desc">Netto annuo ↓</option>
-        <option value="ytm_net_tax:desc">YTM netto ↓</option>
+        <option value="ytm_net_all:desc">Netto all-in ↓</option>
+        <option value="ytm_net_tax:desc">YTM netto (solo tasse) ↓</option>
+        <option value="simple_net_all:desc">Netto annuo semplice ↓</option>
         <option value="ytm_gross:desc">YTM lordo ↓</option>
         <option value="years:asc">Scadenza ↑</option>
         <option value="years:desc">Scadenza ↓</option>
@@ -67,6 +68,9 @@
         <option value="coupon:desc">Cedola ↓</option>
         <option value="name:asc">Nome A-Z</option>
       </select></label>
+    </div>
+    <div class="thead">
+      <span></span><span>Titolo</span><span>Scadenza</span><span>Cedola</span><span>Prezzo</span><span class="r">Netto all-in</span><span>Altri</span>
     </div>
     <div id="list" class="list"></div>
     <button id="more-btn" class="more-btn hidden">Mostra altri</button>
@@ -78,6 +82,20 @@
       Dati indicativi, non costituiscono consulenza. <a href="https://github.com/glc87/bond-app" target="_blank" rel="noopener">Codice e metodo</a>.</p>
   </footer>
 </main>
+
+<div id="cmp-bar" class="cmp-bar hidden">
+  <span><b id="cmp-count">0</b> selezionati</span>
+  <button class="btn" id="cmp-open">Confronta</button>
+  <button class="btn ghost" id="cmp-clear">Svuota</button>
+</div>
+
+<!-- Confronto -->
+<div class="modal hidden" id="compare" role="dialog" aria-modal="true">
+  <div class="sheet wide">
+    <div class="sheet-head"><h2>Confronto</h2><button class="icon-btn" data-close aria-label="Chiudi">✕</button></div>
+    <div class="sheet-body" id="cmp-body"></div>
+  </div>
+</div>
 
 <!-- Scheda titolo -->
 <div class="modal hidden" id="detail" role="dialog" aria-modal="true">
@@ -123,8 +141,9 @@
       </div>
       <h3>Come leggere i numeri</h3>
       <ul class="hint">
-        <li><b>Netto annuo</b>: guadagno netto totale (cedole nette + rimborso netto − costo − bollo) diviso costo e anni. Nessuna ipotesi di reinvestimento: è il dato "certo".</li>
-        <li><b>YTM netto</b>: tasso composto che eguaglia costo e flussi netti (tasse su cedole, rateo e plusvalenza), senza commissioni e bollo. Confrontabile con altri siti.</li>
+        <li><b>Netto all-in</b> (dato principale): tasso annuo composto che eguaglia l'esborso (prezzo + rateo netto + commissioni) ai flussi netti (cedole tassate, rimborso al netto della tassa sulla plusvalenza, bollo). È la misura giusta per confrontare titoli con scadenze diverse.</li>
+        <li><b>YTM netto (solo tasse)</b>: come sopra senza commissioni e bollo. Confrontabile con altri siti (che però di solito non tassano la plusvalenza).</li>
+        <li><b>Netto annuo semplice</b>: guadagno netto totale ÷ esborso ÷ anni, senza reinvestimento. Dice quanto incassi in media all'anno, ma gonfia i titoli lunghi a forte sconto (il guadagno arriva tutto a scadenza): non usarlo per le classifiche.</li>
         <li><b>YTM lordo</b>: come pubblicato da Borsa Italiana.</li>
         <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione (è quello che pagheresti); <span class="badge ref">rif</span> = prezzo di riferimento dell'ultima seduta (nessuna proposta in vendita); <span class="badge stale">fermo</span> = riferimento di un titolo mai scambiato nell'anno: prezzo vecchio, rendimento non realistico. I titoli "fermi" sono esclusi dalle classifiche.</li>
         <li><b>Sopra 100</b>: a scadenza si genera una minusvalenza (credito fiscale, 4 anni): non è conteggiata nel rendimento ma viene indicata.</li>

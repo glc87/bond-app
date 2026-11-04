@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.2.3
+run_daily.py — v0.3.0
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -26,7 +26,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.2.3"
+VERSION = "0.3.0"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -191,6 +191,24 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
     return rec
 
 
+def update_series(out: Path, trade_date: date, hist: list, max_points: int = 1500) -> None:
+    """data/series/<ISIN>.json = [[data, prezzo, ytm_lordo, ytm_netto, netto_semplice, fonte], ...] per i grafici.
+    Il punto di oggi sostituisce un eventuale punto con la stessa data (run ripetuti)."""
+    sdir = out / "series"; sdir.mkdir(parents=True, exist_ok=True)
+    today = trade_date.isoformat()
+    r4 = lambda v: round(v, 5) if isinstance(v, (int, float)) else None
+    for h in hist:
+        f = sdir / f"{h['isin']}.json"
+        try:
+            pts = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+        except Exception:
+            pts = []
+        pts = [pt for pt in pts if pt[0] != today]
+        pts.append([today, h["p"], r4(h["yg"]), r4(h["yn"]), r4(h["sn"]), h["src"]])
+        pts.sort(key=lambda pt: pt[0])
+        f.write_text(json.dumps(pts[-max_points:], separators=(",", ":")), encoding="utf-8")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--segments", nargs="*", default=None, choices=list(bi.SEGMENTS))
@@ -247,6 +265,7 @@ def main(argv=None):
              "yg": (r["calc"] or {}).get("ytm_gross"), "yn": (r["calc"] or {}).get("ytm_net_tax"),
              "sn": (r["calc"] or {}).get("simple_net_all")} for r in records]
     (out / "history" / f"{trade_date.isoformat()}.json").write_text(json.dumps(hist, separators=(",", ":")), encoding="utf-8")
+    update_series(out, trade_date, hist)
     log.info("Fatto: %d titoli, %d calcolabili, %d falliti, %d richieste in %.0fs",
              len(records), len(computable), len(failed), client.n_requests, meta["duration_s"])
     return 0
