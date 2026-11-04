@@ -133,3 +133,6 @@ table.kv td:last-child { text-align: right; font-variant-numeric: tabular-nums; 
 .pos-actions { margin-top: 4px; font-size: 12.5px; }
 h4.sub { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
 @media (min-width: 900px) { .card.pos { grid-template-columns: 1fr auto; grid-template-areas: "name net"; } }
+.isin-row { display: inline-flex; align-items: center; gap: 6px; }
+.isin-row code { font-size: 13px; background: var(--bg); padding: 1px 6px; border-radius: 6px; user-select: all; }
+button.copy { border: 1px solid var(--line); background: var(--card); color: var(--accent); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }

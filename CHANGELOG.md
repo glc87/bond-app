@@ -33,3 +33,6 @@
 - app v0.5.0 / portfolio.js v0.1.0: portafoglio sul dispositivo (posizioni con costo effettivo, cedole incassate, latente,
   YTM netto bloccato al carico), calendario cedole/rimborsi 12 mesi, zainetto fiscale (manuale + previsto), backup JSON.
   Verificato a mano su BTP 6,5% Nv27 comprato a 103,18 il 04/11/2024.
+- Deploy Pages delle 19:41 fallito per timeout (rilanciato). run_daily v0.4.1: serie storiche in 64 file (hash ISIN, stessa
+  formula in app.js) invece di uno per titolo. app v0.5.1: tasto copia ISIN nella scheda; sw.js v0.2.0 rete-prima
+  (gli aggiornamenti arrivano al primo refresh, cache solo offline).

@@ -1,8 +1,8 @@
-/* app.js — v0.5.0 — Bond Netto (PWA) */
+/* app.js — v0.5.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.5.0";
+  const APP_VERSION = "0.5.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -220,7 +220,7 @@
   function openDetail(isin) {
     const b = state.bonds.find(x => x.isin === isin); if (!b) return;
     $("#d-name").textContent = b.name;
-    $("#d-sub").textContent = `${b.isin} · ${b.issuer} · ${CAT_LABEL[b._cat]} · ${KIND_LABEL[b.kind]}`;
+    $("#d-sub").innerHTML = `<span class="isin-row"><code>${esc(b.isin)}</code><button class="copy" data-copy="${esc(b.isin)}" title="Copia ISIN">⧉ copia</button></span> · ${esc(b.issuer)} · ${CAT_LABEL[b._cat]} · ${KIND_LABEL[b.kind]}`;
     const nominalDefault = Math.max(state.settings.nominal, b.min_lot || 0);
     $("#d-body").innerHTML = detailHTML(b, nominalDefault);
     $("#detail").classList.remove("hidden");
@@ -283,10 +283,15 @@
       <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>`;
   }
 
+  function seriesShard(isin) {   // identica a run_daily.series_shard
+    let h = 0; for (const ch of isin.toUpperCase()) h = (h * 31 + ch.charCodeAt(0)) % 1000003;
+    return String(h % 64).padStart(2, "0");
+  }
+
   async function loadChart(b) {
     const el = $("#d-chart"); if (!el) return;
     let pts = [];
-    try { const r = await fetch(`data/series/${b.isin}.json`, { cache: "no-cache" }); if (r.ok) pts = await r.json(); } catch {}
+    try { const r = await fetch(`data/series/${seriesShard(b.isin)}.json`, { cache: "no-cache" }); if (r.ok) pts = (await r.json())[b.isin] || []; } catch {}
     if (!el.isConnected) return;
     pts = pts.filter(p => p[3] != null);
     if (pts.length < 2) { el.innerHTML = `<span class="hint">Lo storico si costruisce un punto al giorno dagli aggiornamenti: ${pts.length === 1 ? "oggi c'è il primo punto" : "disponibile dal prossimo aggiornamento"}.</span>`; return; }
@@ -391,7 +396,17 @@
   document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", e => e.target.closest(".modal").classList.add("hidden")));
   document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.add("hidden"); }));
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); });
-  document.addEventListener("click", e => { if (e.target.closest(".cmp")) return; const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin); });
+  document.addEventListener("click", async e => {
+    const cp = e.target.closest("[data-copy]");
+    if (cp) {
+      const txt = cp.dataset.copy; let ok = false;
+      try { await navigator.clipboard.writeText(txt); ok = true; } catch {}
+      if (!ok) { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try { ok = document.execCommand("copy"); } catch {} ta.remove(); }
+      const old = cp.textContent; cp.textContent = ok ? "✓ copiato" : "non riuscito"; setTimeout(() => { cp.textContent = old; }, 1500);
+      return;
+    }
+    if (e.target.closest(".cmp")) return; const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin);
+  });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
   ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));

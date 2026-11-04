@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.4.0
+run_daily.py — v0.4.1
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -28,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -193,40 +193,39 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
     return rec
 
 
+SERIES_SHARDS = 64
+
+
+def series_shard(isin: str) -> str:
+    """Cassetto 00..63 scelto con un hash semplice dell'ISIN (stessa formula in app.js: seriesShard).
+    Poche decine di file di dimensione uniforme invece di uno per titolo."""
+    h = 0
+    for ch in isin.upper():
+        h = (h * 31 + ord(ch)) % 1_000_003
+    return f"{h % SERIES_SHARDS:02d}"
+
+
 def update_series(out: Path, trade_date: date, hist: list, max_points: int = 1500) -> None:
-    """data/series/<ISIN>.json = [[data, prezzo, ytm_lordo, ytm_netto, netto_semplice, fonte], ...] per i grafici.
+    """data/series/<shard>.json = {ISIN: [[data, prezzo, ytm_lordo, ytm_netto, netto_semplice, fonte], ...]}.
     Il punto di oggi sostituisce un eventuale punto con la stessa data (run ripetuti)."""
     sdir = out / "series"; sdir.mkdir(parents=True, exist_ok=True)
     today = trade_date.isoformat()
     r4 = lambda v: round(v, 5) if isinstance(v, (int, float)) else None
+    by_shard: dict[str, list] = {}
     for h in hist:
-        f = sdir / f"{h['isin']}.json"
+        by_shard.setdefault(series_shard(h["isin"]), []).append(h)
+    for shard, items in by_shard.items():
+        f = sdir / f"{shard}.json"
         try:
-            pts = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+            data = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
         except Exception:
-            pts = []
-        pts = [pt for pt in pts if pt[0] != today]
-        pts.append([today, h["p"], r4(h["yg"]), r4(h["yn"]), r4(h["sn"]), h["src"]])
-        pts.sort(key=lambda pt: pt[0])
-        f.write_text(json.dumps(pts[-max_points:], separators=(",", ":")), encoding="utf-8")
-
-
-ECB_FX_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
-
-
-def fetch_ecb_rates(client: "bi.Client") -> dict:
-    """Tassi di cambio di riferimento BCE (1 EUR = x valuta), pubblicati ogni giorno lavorativo alle 16:00 CET."""
-    try:
-        xml = client.get(ECB_FX_URL)
-        root = ET.fromstring(xml)
-        ns = {"e": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"}
-        day = root.find(".//e:Cube[@time]", ns)
-        rates = {c.get("currency"): float(c.get("rate")) for c in day.findall("e:Cube", ns)}
-        rates["EUR"] = 1.0
-        return {"date": day.get("time"), "base": "EUR", "rates": rates, "source": ECB_FX_URL}
-    except Exception as e:
-        log.warning("Cambi BCE non disponibili: %s", e)
-        return {"date": None, "base": "EUR", "rates": {"EUR": 1.0}, "source": ECB_FX_URL, "error": str(e)}
+            data = {}
+        for h in items:
+            pts = [pt for pt in data.get(h["isin"], []) if pt[0] != today]
+            pts.append([today, h["p"], r4(h["yg"]), r4(h["yn"]), r4(h["sn"]), h["src"]])
+            pts.sort(key=lambda pt: pt[0])
+            data[h["isin"]] = pts[-max_points:]
+        f.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
 
 
 def main(argv=None):
