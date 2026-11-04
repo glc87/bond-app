@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.2.1
+run_daily.py — v0.2.2
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -26,7 +26,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -85,6 +85,19 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
     else:
         price, src = None, "none"
 
+    # --- qualità del prezzo: un prezzo di riferimento su un titolo che non scambia è un prezzo fantasma
+    #     (es. strip IT0005498727 a 91,80 = 8% di rendimento: nessun contratto nell'anno, nessun ask).
+    traded_today = bool(b.n_trades_today) or bool(s.last_price and s.last_trade_time)
+    if b.ask:
+        price_quality = "ask"            # prezzo a cui si può comprare adesso
+    elif traded_today:
+        price_quality = "traded"         # riferimento di un titolo scambiato oggi: buono
+    elif b.year_high is not None:
+        price_quality = "quiet"          # non scambiato oggi, ma scambiato nell'anno: usare con cautela
+    else:
+        price_quality = "stale"          # nessun ask, nessuno scambio nell'anno: NON affidabile
+        anomalies.append("prezzo fermo: nessuna proposta in vendita e nessuno scambio nell'anno")
+
     rec = {
         "isin": s.isin or row.isin,
         "name": s.name or row.name,
@@ -110,7 +123,9 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
         "tax_rate": tax,
         "tax_reason": tax_why,
         "price": {
-            "used": price, "source": src,
+            "used": price, "source": src, "quality": price_quality,
+            "traded_today": traded_today, "volume_today": b.volume_today, "n_trades_today": b.n_trades_today,
+            "year_high": b.year_high, "year_low": b.year_low, "market_phase": b.market_phase,
             "ask": b.ask, "ask_qty": b.ask_qty, "bid": b.bid, "bid_qty": b.bid_qty,
             "ref": ref, "ref_date": s.ref_date.isoformat() if s.ref_date else None,
             "last": s.last_price or b.last_price, "last_time": s.last_trade_time,
@@ -218,6 +233,7 @@ def main(argv=None):
         "by_segment": dict(Counter(r["segment"] for r in records)),
         "by_currency": dict(Counter(r["currency"] for r in records)),
         "price_source": dict(Counter(r["price"]["source"] for r in records)),
+        "price_quality": dict(Counter(r["price"]["quality"] for r in records)),
         "n_with_anomalies": sum(1 for r in records if r["anomalies"]),
         "n_tax_not_confirmed": sum(1 for r in records if r["check"].get("tax_rate_confirmed") is False),
         "failed": failed,

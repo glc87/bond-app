@@ -1,4 +1,4 @@
-/* app.css — v0.1.0 */
+/* app.css — v0.1.1 */
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6475; --line: #e3e6eb;
   --accent: #0b5fff; --accent-ink: #ffffff; --good: #0a7d3e; --warn: #b45309; --bad: #b91c1c;
@@ -63,6 +63,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; font-weight: 600; vertical-align: middle; }
 .badge.ask { background: var(--ask); color: var(--ask-ink); }
 .badge.ref { background: var(--ref); color: var(--ref-ink); }
+.badge.stale { background: #fee2e2; color: #991b1b; }
 .badge.cur { background: var(--line); color: var(--ink); }
 .badge.warn { background: var(--ref); color: var(--ref-ink); }
 .more-btn { margin: 14px auto 0; display: block; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }

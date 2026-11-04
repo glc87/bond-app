@@ -1,4 +1,4 @@
-/* app.js — v0.1.1 — Bond Netto (PWA) */
+/* app.js — v0.2.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
@@ -48,7 +48,7 @@
     const q = $("#q").value.trim().toLowerCase();
     const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value;
     const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value);
-    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked;
+    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, onlyReliable = $("#f-reliable").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
       if (state.cat !== "all" && b._cat !== state.cat) return false;
@@ -62,10 +62,11 @@
       if (!isNaN(nmin) && !(b._calc && b._calc.simple_net_all != null && b._calc.simple_net_all * 100 >= nmin)) return false;
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
+      if (onlyReliable && quality(b) === "stale") return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur, country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur, country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", onlyReliable ? "" : 1, (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -92,9 +93,17 @@
     });
   }
 
+  function quality(b) {
+    const q = b.price.quality;
+    if (q) return q;
+    return b.price.source === "ask" ? "ask" : "quiet";   // dati vecchi senza il campo
+  }
+  const QUALITY_LABEL = { ask: "ask", traded: "rif · scambiato oggi", quiet: "rif · non scambiato oggi", stale: "prezzo fermo" };
+  function reliable(b) { const q = quality(b); return q === "ask" || q === "traded"; }
   function priceBadge(b) {
-    const src = b.price.source;
-    return src === "ask" ? '<span class="badge ask">ask</span>' : src === "ref" ? '<span class="badge ref">rif</span>' : '<span class="badge ref">ultimo</span>';
+    const q = quality(b);
+    const cls = q === "ask" ? "ask" : q === "stale" ? "stale" : "ref";
+    return `<span class="badge ${cls}" title="${QUALITY_LABEL[q]}">${q === "ask" ? "ask" : q === "stale" ? "fermo" : "rif"}</span>`;
   }
 
   function cardHTML(b) {
@@ -124,7 +133,7 @@
 
   function renderBest() {
     const buckets = [["Fino a 2 anni", 0, 2], ["2–5 anni", 2, 5], ["5–10 anni", 5, 10], ["10–20 anni", 10, 20], ["Oltre 20 anni", 20, 1e9]];
-    const pool = state.filtered.filter(b => b._calc && b._calc.simple_net_all != null);
+    const pool = state.filtered.filter(b => b._calc && b._calc.simple_net_all != null && reliable(b));
     $("#best").innerHTML = buckets.map(([label, lo, hi]) => {
       const top = pool.filter(b => b._years >= lo && b._years < hi).sort((a, b) => b._calc.simple_net_all - a._calc.simple_net_all).slice(0, 3);
       if (!top.length) return "";
@@ -149,6 +158,7 @@
     const rows = [
       ["Prezzo usato", `${fmtNum(b._price)} ${priceBadge(b)}`], ["Ask / Bid", `${fmtNum(p.ask)} (${fmtNum(p.ask_qty, 0)}) / ${fmtNum(p.bid)} (${fmtNum(p.bid_qty, 0)})`],
       ["Prezzo di riferimento", `${fmtNum(p.ref)} del ${fmtDate(p.ref_date)}`], ["Ultimo contratto", `${fmtNum(p.last)} ${esc(p.last_time || "")}`],
+      ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtEur(p.volume_today)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
       ["Valuta", b.currency], ["Scadenza", `${fmtDate(b.maturity)} (${fmtNum(b._years, 2)} anni)`],
       ["Cedola", b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% annuo, ${FREQ_LABEL[b.coupon_frequency] || b.coupon_frequency_label || "–"}`],
       ["Lotto minimo", fmtEur(b.min_lot)], ["Aliquota fiscale", `${fmtNum(b.tax_rate * 100, 1)}% (${esc(b.tax_reason)})`],
@@ -170,7 +180,10 @@
   function calcHTML(b, nominal) {
     const c = Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: Yields.parseISO(state.meta.trade_date), ...params(nominal) });
     const minus = c.minus_eur > 0 ? `<div class="note">Prezzo sopra 100: a scadenza si genera una minusvalenza di ${fmtEur(c.minus_eur)} (credito fiscale compensabile con altre plusvalenze da "redditi diversi" entro i 4 anni successivi). Non è conteggiata nel rendimento.</div>` : "";
-    const src = b.price.source !== "ask" ? `<div class="note">Nessuna proposta in vendita nel book al momento della rilevazione: calcolo sul prezzo di riferimento.</div>` : "";
+    const q = quality(b);
+    const src = q === "stale" ? `<div class="note">⚠ <b>Prezzo fermo</b>: nessuna proposta in vendita e nessuno scambio nell'anno. Il prezzo di riferimento (${fmtNum(b.price.ref)}) è vecchio e il rendimento calcolato non è realistico: nessuno vende a questo prezzo.</div>`
+      : q === "quiet" ? `<div class="note">Nessuna proposta in vendita nel book e nessuno scambio oggi: calcolo sul prezzo di riferimento, che potrebbe non essere aggiornato.</div>`
+      : q === "traded" ? `<div class="note">Nessuna proposta in vendita nel book al momento della rilevazione: calcolo sul prezzo di riferimento (titolo scambiato oggi).</div>` : "";
     return `<div class="kpis">
       <div class="kpi"><div class="l">Netto annuo (all-in, senza reinvestimento)</div><div class="v good">${fmtPct(c.simple_net_all)}</div></div>
       <div class="kpi"><div class="l">YTM netto all-in</div><div class="v">${fmtPct(c.ytm_net_all)}</div></div>
@@ -214,7 +227,7 @@
   document.addEventListener("click", e => { const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin); });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-ask", "#f-nominus", "#f-reliable"].forEach(id => $(id).addEventListener("input", applyFilters));
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

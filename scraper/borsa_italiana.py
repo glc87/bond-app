@@ -1,5 +1,5 @@
 """
-borsa_italiana.py — v0.1.0
+borsa_italiana.py — v0.2.0
 Download e parsing delle pagine obbligazioni di Borsa Italiana (MOT).
 
 Tre tipi di pagina, tutte HTML server-side (nessun JavaScript richiesto):
@@ -23,7 +23,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 BASE = "https://www.borsaitaliana.it"
 
 # Segmenti MOT: chiave = slug nell'URL, valore = descrizione
@@ -165,6 +165,11 @@ class Book:
     ref_price: Optional[float] = None
     tipo_bond: str = ""                           # "Titolo Con Cedole Tf", "Zero Coupon", ...
     market_phase: str = ""
+    volume_today: Optional[float] = None          # Volume totale (nominale scambiato oggi)
+    n_trades_today: Optional[float] = None        # Numero Contratti oggi
+    last_trade_time: str = ""                     # "04/11/26 - 12.19.39" oppure "-"
+    year_high: Optional[float] = None             # Max Anno (vuoto = nessuno scambio nell'anno)
+    year_low: Optional[float] = None
     raw: dict = field(default_factory=dict)
 
 
@@ -284,6 +289,11 @@ def parse_dati_completi(html: str) -> Book:
         ref_price=it_number(kv.get("Prezzo di riferimento")),
         tipo_bond=kv.get("Tipo Bond", ""),
         market_phase=kv.get("Fase di Mercato", ""),
+        volume_today=it_number(kv.get("Volume totale")),
+        n_trades_today=it_number(kv.get("Numero Contratti")),
+        last_trade_time=kv.get("Data - Ora Ultimo Contratto", ""),
+        year_high=it_number(kv.get("Max Anno")),
+        year_low=it_number(kv.get("Min Anno")),
         raw=kv,
     )
 
