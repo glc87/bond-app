@@ -1,5 +1,5 @@
 """
-yields.py — v0.2.1
+yields.py — v0.2.2
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -84,6 +84,16 @@ def target_holidays(year: int) -> set[date]:
     e = easter(year)
     return {date(year, 1, 1), e - timedelta(days=2), e + timedelta(days=1),
             date(year, 5, 1), date(year, 12, 25), date(year, 12, 26)}
+
+
+def borsa_italiana_holidays(year: int) -> set[date]:
+    """Giorni di chiusura del MOT (Borsa Italiana): TARGET + 15 agosto, 24 e 31 dicembre.
+    Il regolamento (T+2) segue invece il calendario TARGET: le due cose restano distinte."""
+    return target_holidays(year) | {date(year, 8, 15), date(year, 12, 24), date(year, 12, 31)}
+
+
+def is_trading_day(d: date) -> bool:
+    return d.weekday() < 5 and d not in borsa_italiana_holidays(d.year)
 
 
 def is_business_day(d: date) -> bool:

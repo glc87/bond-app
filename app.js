@@ -1,12 +1,14 @@
-/* app.js — v0.3.3 — Bond Netto (PWA) */
+/* app.js — v0.4.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
+  const APP_VERSION = "0.4.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
   const fmtNum = (v, d = 2) => v == null ? "–" : v.toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d });
   const fmtEur = v => v == null ? "–" : v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+  const fmtCur = (v, cur) => { if (v == null) return "–"; try { return v.toLocaleString("it-IT", { style: "currency", currency: cur || "EUR", maximumFractionDigits: 0 }); } catch { return `${fmtNum(v, 0)} ${cur}`; } };
   const fmtDate = s => s ? new Date(s).toLocaleDateString("it-IT") : "–";
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -22,6 +24,12 @@
     return { commissionPct: s.commissionPct / 100, commissionMin: s.commissionMin, commissionMax: (s.commissionMax === "" || s.commissionMax == null) ? null : s.commissionMax,
       bolloRate: s.bolloRate / 100, nominal: nominal ?? s.nominal };
   }
+
+  function fxRate(cur) {   // 1 EUR = x valuta (BCE); null se non disponibile
+    const fx = state.meta && state.meta.fx; if (!fx || !fx.rates) return cur === "EUR" ? 1 : null;
+    return fx.rates[cur] ?? null;
+  }
+  const toEur = (v, cur) => { const r = fxRate(cur); return r ? v / r : null; };
 
   function category(b) {
     const t = (b.tipologia || "").toLowerCase();
@@ -130,7 +138,7 @@
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
       <div class="c-name"><div class="name">${esc(b.name)} ${minus}</div>
-        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtEur(b.min_lot)}</span>` : ""}</div></div>
+        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span></div>
@@ -172,12 +180,12 @@
       ["YTM netto (solo tasse)", (b, c) => c ? fmtPct(c.ytm_net_tax) : "n.d."],
       ["YTM lordo", (b, c) => c ? fmtPct(c.ytm_gross) : "n.d."],
       ["Rendimento immediato", (b, c) => c && b.kind !== "zero" ? fmtPct(c.current_yield_gross) : "–"],
-      ["Esborso oggi", (b, c) => c ? `${fmtEur(c.cost_total_eur)}<br><span class="small">su ${fmtEur(c.nominal)} nominali</span>` : "–"],
-      ["Cedole nette totali", (b, c) => c ? fmtEur(c.coupons_net_total_eur) : "–"],
-      ["Guadagno netto a scadenza", (b, c) => c ? `<b>${fmtEur(c.net_gain_total_eur)}</b>` : "–"],
-      ["Minusvalenza a scadenza", (b, c) => c && c.minus_eur > 0 ? `<span class="ko">${fmtEur(c.minus_eur)}</span>` : "–"],
+      ["Esborso oggi", (b, c) => c ? `${fmtCur(c.cost_total_eur, b.currency)}<br><span class="small">su ${fmtCur(c.nominal, b.currency)} nominali</span>` : "–"],
+      ["Cedole nette totali", (b, c) => c ? fmtCur(c.coupons_net_total_eur, b.currency) : "–"],
+      ["Guadagno netto a scadenza", (b, c) => c ? `<b>${fmtCur(c.net_gain_total_eur, b.currency)}</b>` : "–"],
+      ["Minusvalenza a scadenza", (b, c) => c && c.minus_eur > 0 ? `<span class="ko">${fmtCur(c.minus_eur, b.currency)}</span>` : "–"],
       ["Duration modificata (BI)", b => fmtNum(b.bi.mod_duration)],
-      ["Lotto minimo", b => fmtEur(b.min_lot)],
+      ["Lotto minimo", b => fmtCur(b.min_lot, b.currency)],
     ];
     $("#cmp-body").innerHTML = `<div class="cmp-scroll"><table class="cmp"><thead><tr><th></th>${bonds.map(b => `<th><div class="name">${esc(b.name)}</div><div class="small">${esc(b.isin)}</div><button class="link" data-isin="${b.isin}">scheda</button> · <button class="link" data-uncmp="${b.isin}">togli</button></th>`).join("")}</tr></thead>
       <tbody>${rows.map(([l, f]) => `<tr><td>${l}</td>${bonds.map((b, i) => `<td>${f(b, calcs[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
@@ -226,11 +234,11 @@
     const rows = [
       ["Prezzo usato", `${fmtNum(b._price)} ${priceBadge(b)}`], ["Ask / Bid", `${fmtNum(p.ask)} (${fmtNum(p.ask_qty, 0)}) / ${fmtNum(p.bid)} (${fmtNum(p.bid_qty, 0)})`],
       ["Prezzo di riferimento", `${fmtNum(p.ref)} del ${fmtDate(p.ref_date)}`], ["Ultimo contratto", `${fmtNum(p.last)} ${esc(p.last_time || "")}`],
-      ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtEur(p.volume_today)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
+      ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtCur(p.volume_today, b.currency)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
       ["Valuta", b.currency], ["Scadenza", `${fmtDate(b.maturity)} (${fmtNum(b._years, 2)} anni)`],
       ["Cedola", b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% annuo, ${FREQ_LABEL[b.coupon_frequency] || b.coupon_frequency_label || "–"}`],
-      ["Lotto minimo", fmtEur(b.min_lot)], ["Aliquota fiscale", `${fmtNum(b.tax_rate * 100, 1)}% (${esc(b.tax_reason)})`],
-      ["Emesso", b.outstanding ? fmtEur(b.outstanding) : "–"], ["Subordinato", b.subordinated || "–"], ["Segmento", b.segment],
+      ["Lotto minimo", fmtCur(b.min_lot, b.currency)], ["Aliquota fiscale", `${fmtNum(b.tax_rate * 100, 1)}% (${esc(b.tax_reason)})`],
+      ["Emesso", b.outstanding ? fmtCur(b.outstanding, b.currency) : "–"], ["Subordinato", b.subordinated || "–"], ["Segmento", b.segment],
     ];
     const biRows = bi.yield_gross != null ? `<h3>Dati Borsa Italiana (prezzo di riferimento)</h3><table class="kv">
       <tr><td>YTM lordo BI / nostro sullo stesso prezzo</td><td>${fmtNum(bi.yield_gross)} / ${ck.ytm_gross_vs_bi != null ? fmtNum(bi.yield_gross + ck.ytm_gross_vs_bi) : "–"} <span class="${Math.abs(ck.ytm_gross_vs_bi || 0) < 0.05 ? "ok" : "ko"}">●</span></td></tr>
@@ -249,7 +257,7 @@
 
   function calcHTML(b, nominal) {
     const c = Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: Yields.parseISO(state.meta.trade_date), ...params(nominal) });
-    const minus = c.minus_eur > 0 ? `<div class="note">Prezzo sopra 100: a scadenza si genera una minusvalenza di ${fmtEur(c.minus_eur)} (credito fiscale compensabile con altre plusvalenze da "redditi diversi" entro i 4 anni successivi). Non è conteggiata nel rendimento.</div>` : "";
+    const minus = c.minus_eur > 0 ? `<div class="note">Prezzo sopra 100: a scadenza si genera una minusvalenza di ${fmtCur(c.minus_eur, b.currency)} (credito fiscale compensabile con altre plusvalenze da "redditi diversi" entro i 4 anni successivi). Non è conteggiata nel rendimento.</div>` : "";
     const q = quality(b);
     const src = q === "stale" ? `<div class="note">⚠ <b>Prezzo fermo</b>: nessuna proposta in vendita e nessuno scambio nell'anno. Il prezzo di riferimento (${fmtNum(b.price.ref)}) è vecchio e il rendimento calcolato non è realistico: nessuno vende a questo prezzo.</div>`
       : q === "quiet" ? `<div class="note">Nessuna proposta in vendita nel book e nessuno scambio oggi: calcolo sul prezzo di riferimento, che potrebbe non essere aggiornato.</div>`
@@ -259,18 +267,19 @@
       <div class="kpi"><div class="l">Netto annuo semplice (senza reinvestimento)</div><div class="v">${fmtPct(c.simple_net_all)}</div></div>
       <div class="kpi"><div class="l">YTM netto (solo tasse)</div><div class="v">${fmtPct(c.ytm_net_tax)}</div></div>
       <div class="kpi"><div class="l">YTM lordo</div><div class="v">${fmtPct(c.ytm_gross)}</div></div>
-      <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtEur(c.net_gain_total_eur)}</div></div>
+      <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)}</div></div>
       ${b.kind !== "zero" ? `<div class="kpi"><div class="l">Rendimento immediato (cedola/prezzo)</div><div class="v">${fmtPct(c.current_yield_gross)}</div></div>` : ""}
     </div>${minus}${src}
-    <h3>Flussi per ${fmtEur(nominal)} nominali</h3><table class="kv">
+    ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
+    <h3>Flussi per ${nominal.toLocaleString("it-IT")} ${esc(b.currency)} nominali</h3><table class="kv">
       <tr><td>Regolamento (T+2)</td><td>${fmtDate(c.settle_date)}</td></tr>
-      <tr><td>Prezzo + rateo netto (${fmtNum(c.accrued_net, 3)})</td><td>${fmtEur(c.cost_total_eur - c.commission_eur)}</td></tr>
-      <tr><td>Commissioni</td><td>${fmtEur(c.commission_eur)}</td></tr>
-      <tr><td><b>Esborso oggi</b></td><td><b>${fmtEur(c.cost_total_eur)}</b></td></tr>
-      <tr><td>Cedole nette (${c.n_coupons} × ${fmtEur(c.coupon_net_per_period / 100 * nominal)})${c.next_coupon_date ? `, prossima ${fmtDate(c.next_coupon_date)}` : ""}</td><td>${fmtEur(c.coupons_net_total_eur)}</td></tr>
-      <tr><td>Rimborso netto (tassa su plusvalenza ${fmtEur(c.capital_gain_tax_eur)})</td><td>${fmtEur(c.redemption_net_eur)}</td></tr>
-      <tr><td>Imposta di bollo stimata (totale)</td><td>−${fmtEur(c.bollo_total_eur)}</td></tr>
-      <tr><td><b>Guadagno netto</b></td><td><b>${fmtEur(c.net_gain_total_eur)}</b></td></tr></table>`;
+      <tr><td>Prezzo + rateo netto (${fmtNum(c.accrued_net, 3)})</td><td>${fmtCur(c.cost_total_eur - c.commission_eur, b.currency)}</td></tr>
+      <tr><td>Commissioni</td><td>${fmtCur(c.commission_eur, b.currency)}</td></tr>
+      <tr><td><b>Esborso oggi</b></td><td><b>${fmtCur(c.cost_total_eur, b.currency)}</b></td></tr>
+      <tr><td>Cedole nette (${c.n_coupons} × ${fmtCur(c.coupon_net_per_period / 100 * nominal, b.currency)})${c.next_coupon_date ? `, prossima ${fmtDate(c.next_coupon_date)}` : ""}</td><td>${fmtCur(c.coupons_net_total_eur, b.currency)}</td></tr>
+      <tr><td>Rimborso netto (tassa su plusvalenza ${fmtCur(c.capital_gain_tax_eur, b.currency)})</td><td>${fmtCur(c.redemption_net_eur, b.currency)}</td></tr>
+      <tr><td>Imposta di bollo stimata (totale)</td><td>−${fmtCur(c.bollo_total_eur, b.currency)}</td></tr>
+      <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>`;
   }
 
   async function loadChart(b) {
@@ -299,6 +308,53 @@
       <text x="${L}" y="${H - 8}" font-size="11" fill="var(--muted)">${fmtDate(first)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end" font-size="11" fill="var(--muted)">${fmtDate(last)}</text></svg>
       <div class="legend">${legend}<span class="hint">${pts.length} rilevazioni</span></div>`;
   }
+
+  function fxNote(b, c, nominal) {
+    const r = fxRate(b.currency);
+    const fxd = state.meta.fx && state.meta.fx.date ? ` (BCE del ${fmtDate(state.meta.fx.date)})` : "";
+    if (!r) return `<div class="note">Titolo in ${esc(b.currency)}: cambio non disponibile. Il rendimento è nella valuta del titolo e NON tiene conto del cambio.</div>`;
+    return `<div class="note">Titolo in <b>${esc(b.currency)}</b>, 1 EUR = ${fmtNum(r, 4)} ${esc(b.currency)}${fxd}. Al cambio di oggi: esborso ${fmtEur(c.cost_total_eur / r)},
+      cedole nette totali ${fmtEur(c.coupons_net_total_eur / r)}, rimborso netto ${fmtEur(c.redemption_net_eur / r)}.
+      Il rendimento mostrato è <b>in ${esc(b.currency)}</b>: in euro sarà più alto se la valuta si rafforza, più basso se si svaluta. Nessuno conosce il cambio futuro: un rendimento alto in valuta riflette di solito un'inflazione alta e una svalutazione attesa.</div>`;
+  }
+
+  // ---------------- diagnostica ----------------
+  function openDiag() {
+    const m = state.meta; const B = state.bonds;
+    const row = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
+    const pct = (n, d) => d ? `${n} (${(n / d * 100).toFixed(0)}%)` : n;
+    const dev = B.filter(b => b.check && b.check.ytm_gross_vs_bi != null && b._years > 0.5);
+    const within = t => dev.filter(b => Math.abs(b.check.ytm_gross_vs_bi) <= t).length;
+    const tax = B.filter(b => b.check && "tax_rate_confirmed" in b.check);
+    const taxc = v => tax.filter(b => b.check.tax_rate_confirmed === v).length;
+    const q = m.price_quality || {};
+    const anomalies = B.filter(b => (b.anomalies || []).length);
+    const runAt = new Date(m.run_at);
+    $("#diag-body").innerHTML = `
+      <h3>Ultimo aggiornamento</h3><table class="kv">
+      ${row("Rilevazione", `${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`)}
+      ${row("Durata / richieste", `${Math.round((m.duration_s || 0) / 60)} min / ${m.requests || "–"}`)}
+      ${row("Versioni", Object.entries(m.versions || {}).map(([k, v]) => `${k} ${v}`).join(", ") + `, app ${APP_VERSION}`)}
+      ${row("Cambi BCE", m.fx && m.fx.date ? `${fmtDate(m.fx.date)}, ${Object.keys(m.fx.rates).length} valute` : "non disponibili")}
+      ${row("Titoli letti / falliti", `${m.n_total} / ${m.n_failed}`)}
+      ${row("Con rendimento calcolato", pct(m.n_computable, m.n_total))}
+      </table>
+      <h3>Tipi di titolo</h3><table class="kv">${Object.entries(m.by_kind || {}).map(([k, v]) => row(KIND_LABEL[k] || k, v)).join("")}</table>
+      <h3>Qualità dei prezzi</h3><table class="kv">
+      ${row("Con ask (prezzo di vendita reale)", pct(q.ask || (m.price_source || {}).ask || 0, m.n_total))}
+      ${row("Riferimento, scambiato oggi", q.traded ?? "–")}${row("Riferimento, non scambiato oggi", q.quiet ?? "–")}${row("Fermo (mai scambiato nell'anno)", q.stale ?? "–")}
+      </table>
+      <h3>Verifica incrociata con Borsa Italiana</h3><table class="kv">
+      ${row("Titoli confrontabili (scadenza > 6 mesi)", dev.length)}
+      ${row("YTM lordo entro 0,02 punti", pct(within(0.02), dev.length))}${row("entro 0,05", pct(within(0.05), dev.length))}${row("oltre 0,25 (esclusi come incerti)", dev.length - within(0.25))}
+      ${row("Aliquota confermata / non discriminante / contraddetta", `${taxc(true)} / ${taxc(null)} / ${taxc(false)}`)}
+      ${row("Titoli con note tecniche", anomalies.length)}
+      </table>
+      ${m.failed && m.failed.length ? `<h3>Falliti</h3><table class="kv">${m.failed.map(f => row(f.isin, esc(f.error))).join("")}</table>` : ""}
+      <h3>Note tecniche (prime 100)</h3><table class="kv">${anomalies.slice(0, 100).map(b => row(`<span data-isin="${b.isin}" class="lnk">${esc(b.name)}</span><br><span class="small">${b.isin}</span>`, b.anomalies.map(esc).join("<br>"))).join("")}</table>`;
+    $("#diag").classList.remove("hidden");
+  }
+  $("#btn-diag").addEventListener("click", openDiag);
 
   // ---------------- impostazioni ----------------
   function openSettings() {

@@ -17,7 +17,8 @@
     <h1>Bond Netto</h1>
     <div class="sub" id="meta">caricamento…</div>
   </div>
-  <button class="icon-btn" id="btn-settings" title="Impostazioni" aria-label="Impostazioni">⚙</button>
+  <div class="row-btns"><button class="icon-btn" id="btn-diag" title="Diagnostica dati" aria-label="Diagnostica">ⓘ</button>
+  <button class="icon-btn" id="btn-settings" title="Impostazioni" aria-label="Impostazioni">⚙</button></div>
 </header>
 
 <main>
@@ -88,6 +89,14 @@
   <span><b id="cmp-count">0</b> selezionati</span>
   <button class="btn" id="cmp-open">Confronta</button>
   <button class="btn ghost" id="cmp-clear">Svuota</button>
+</div>
+
+<!-- Diagnostica -->
+<div class="modal hidden" id="diag" role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Diagnostica dati</h2><button class="icon-btn" data-close aria-label="Chiudi">✕</button></div>
+    <div class="sheet-body" id="diag-body"></div>
+  </div>
 </div>
 
 <!-- Confronto -->

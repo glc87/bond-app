@@ -1,5 +1,5 @@
 """
-borsa_italiana.py — v0.2.0
+borsa_italiana.py — v0.3.0
 Download e parsing delle pagine obbligazioni di Borsa Italiana (MOT).
 
 Tre tipi di pagina, tutte HTML server-side (nessun JavaScript richiesto):
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import date, datetime
@@ -23,7 +24,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 BASE = "https://www.borsaitaliana.it"
 
 # Segmenti MOT: chiave = slug nell'URL, valore = descrizione
@@ -310,16 +311,21 @@ class Client:
         self.max_retries = max_retries
         self._last = 0.0
         self.n_requests = 0
+        self._lock = threading.Lock()   # il ritmo (delay_s tra una richiesta e la successiva) è GLOBALE, anche con più thread
 
-    def get(self, url: str) -> str:
-        for attempt in range(1, self.max_retries + 1):
+    def _throttle(self) -> None:
+        with self._lock:
             wait = self.delay_s - (time.monotonic() - self._last)
             if wait > 0:
                 time.sleep(wait)
+            self._last = time.monotonic()
+            self.n_requests += 1
+
+    def get(self, url: str) -> str:
+        for attempt in range(1, self.max_retries + 1):
+            self._throttle()
             try:
                 r = self.s.get(url, timeout=self.timeout)
-                self._last = time.monotonic()
-                self.n_requests += 1
                 if r.status_code == 200:
                     return r.text
                 log.warning("HTTP %s su %s (tentativo %d)", r.status_code, url, attempt)
@@ -327,7 +333,6 @@ class Client:
                     time.sleep(30 * attempt)   # rallenta se ci stanno limitando
             except requests.RequestException as e:
                 log.warning("Errore rete %s su %s (tentativo %d)", e, url, attempt)
-                self._last = time.monotonic()
             time.sleep(2 * attempt)
         raise RuntimeError(f"Download fallito: {url}")
 

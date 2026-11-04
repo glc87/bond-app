@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.3.0
+run_daily.py — v0.4.0
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -19,6 +19,8 @@ import json
 import logging
 import sys
 import time
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -26,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -209,12 +211,32 @@ def update_series(out: Path, trade_date: date, hist: list, max_points: int = 150
         f.write_text(json.dumps(pts[-max_points:], separators=(",", ":")), encoding="utf-8")
 
 
+ECB_FX_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+
+
+def fetch_ecb_rates(client: "bi.Client") -> dict:
+    """Tassi di cambio di riferimento BCE (1 EUR = x valuta), pubblicati ogni giorno lavorativo alle 16:00 CET."""
+    try:
+        xml = client.get(ECB_FX_URL)
+        root = ET.fromstring(xml)
+        ns = {"e": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"}
+        day = root.find(".//e:Cube[@time]", ns)
+        rates = {c.get("currency"): float(c.get("rate")) for c in day.findall("e:Cube", ns)}
+        rates["EUR"] = 1.0
+        return {"date": day.get("time"), "base": "EUR", "rates": rates, "source": ECB_FX_URL}
+    except Exception as e:
+        log.warning("Cambi BCE non disponibili: %s", e)
+        return {"date": None, "base": "EUR", "rates": {"EUR": 1.0}, "source": ECB_FX_URL, "error": str(e)}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--segments", nargs="*", default=None, choices=list(bi.SEGMENTS))
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--delay", type=float, default=1.0)
     ap.add_argument("--out", default=str(DATA))
+    ap.add_argument("--workers", type=int, default=2, help="richieste in parallelo (il ritmo --delay resta globale)")
+    ap.add_argument("--force", action="store_true", help="esegui anche nei giorni di chiusura di Borsa Italiana")
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -222,8 +244,14 @@ def main(argv=None):
 
     t0 = time.time()
     trade_date = datetime.now(timezone.utc).astimezone().date()
+    if not y.is_trading_day(trade_date) and not args.force:
+        log.info("%s: Borsa Italiana chiusa, nessun aggiornamento (usa --force per eseguire comunque)", trade_date)
+        return 0
     costs = y.CostParams()
     client = bi.Client(delay_s=args.delay)
+
+    fx = fetch_ecb_rates(client)
+    log.info("Cambi BCE del %s: %d valute", fx.get("date"), len(fx["rates"]))
 
     rows = bi.fetch_all_lists(client, args.segments)
     log.info("Liste: %d titoli unici", len(rows))
@@ -231,15 +259,23 @@ def main(argv=None):
         rows = rows[: args.limit]
 
     records, failed = [], []
-    for i, row in enumerate(rows, 1):
-        try:
-            s, b = bi.fetch_bond(client, row)
-            records.append(build_record(row, s, b, trade_date, costs))
-        except Exception as e:
-            failed.append({"isin": row.isin, "error": str(e)})
-            log.warning("Fallito %s: %s", row.isin, e)
-        if i % 50 == 0:
-            log.info("%d/%d titoli elaborati (%d richieste)", i, len(rows), client.n_requests)
+    done = 0
+
+    def work(row):
+        s, b = bi.fetch_bond(client, row)
+        return build_record(row, s, b, trade_date, costs)
+
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
+        for row, fut in [(row, ex.submit(work, row)) for row in rows]:
+            try:
+                records.append(fut.result())
+            except Exception as e:
+                failed.append({"isin": row.isin, "error": str(e)})
+                log.warning("Fallito %s: %s", row.isin, e)
+            done += 1
+            if done % 50 == 0:
+                log.info("%d/%d titoli elaborati (%d richieste)", done, len(rows), client.n_requests)
+    records.sort(key=lambda r: r["isin"])
 
     computable = [r for r in records if r["computable"]]
     meta = {
@@ -247,6 +283,7 @@ def main(argv=None):
         "trade_date": trade_date.isoformat(),
         "versions": {"run_daily": VERSION, "borsa_italiana": bi.VERSION, "yields": y.VERSION},
         "cost_params_default": y.asdict(costs),
+        "fx": fx,
         "n_total": len(records), "n_computable": len(computable), "n_failed": len(failed),
         "by_kind": dict(Counter(r["kind"] for r in records)),
         "by_segment": dict(Counter(r["segment"] for r in records)),

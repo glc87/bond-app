@@ -27,3 +27,6 @@
   (serie per titolo in data/series/, generate da run_daily v0.3.0 dal 05/11), filtro valuta default EUR,
   dato principale = YTM netto all-in (il netto semplice gonfiava i titoli lunghi a forte sconto).
 - app v0.3.3: titoli 'incerti' (prezzo fermo/non aggiornato, verifica BI non superata) e strip nascosti di default, riattivabili nei filtri avanzati; badge e nota in scheda.
+- run_daily v0.4.0 / borsa_italiana v0.3.0: 2 richieste in parallelo con ritmo globale (--workers, --delay 0,5), salto nei
+  giorni di chiusura Borsa Italiana (15/8, 24/12, 31/12 + TARGET), cambi BCE in meta.fx.
+- app v0.4.0: pagina Diagnostica (ⓘ), equivalenti in euro per i titoli in valuta con avvertenza cambio, importi nella valuta del titolo.

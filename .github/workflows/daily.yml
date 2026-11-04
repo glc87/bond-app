@@ -41,7 +41,7 @@ jobs:
           ARGS=""
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
           if [ -n "${{ github.event.inputs.segments }}" ]; then ARGS="$ARGS --segments ${{ github.event.inputs.segments }}"; fi
-          python scraper/run_daily.py --delay 0.6 $ARGS
+          python scraper/run_daily.py --delay 0.5 --workers 2 $ARGS
 
       - name: Riepilogo
         run: |
