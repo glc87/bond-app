@@ -1,4 +1,4 @@
-/* portfolio.js — v0.2.0 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
+/* portfolio.js — v0.2.1 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
 (() => {
   "use strict";
   const A = window.BondApp;             // helper esposti da app.js
@@ -32,7 +32,7 @@
     const cost = atBuy.cost_total_eur;                       // prezzo + rateo netto + commissioni
     const valueNow = (b._price + now.accrued_net) / 100 * N;  // tel quel netto, al prezzo usato oggi
     const unrealized = (b._price - p.price) / 100 * N;        // plus/minus latente sul corso secco
-    const tax = b.tax_rate;
+    const tax = atBuy.tax_rate;
     const gainAtMaturity = (100 - p.price) / 100 * N;         // >0 plus (tassata), <0 minus (zainetto)
     const minusAtMaturity = Math.max(0, -gainAtMaturity);
     const matYear = parseInt(b.maturity.slice(0, 4), 10);
@@ -146,7 +146,8 @@
     if (nom > p.nominal + 1e-9) { alert(`Puoi vendere al massimo ${p.nominal}.`); return; }
     const share = nom / p.nominal;
     const realized = (price - p.price) / 100 * nom - comm - (p.commission || 0) * share;   // redditi diversi: prezzo - carico, al netto costi
-    const tax = realized > 0 ? realized * (b ? b.tax_rate : 0.26) : 0;
+    const taxRate = b ? ((b.tax_rate <= 0.125001 ? (A.state.settings.taxGov ?? 12.5) : (A.state.settings.taxOther ?? 26)) / 100) : 0.26;
+    const tax = realized > 0 ? realized * taxRate : 0;
     const sale = { id: uid(), posId: p.id, isin: p.isin, nominal: nom, price, date: f.date.value, commission: comm, buyPrice: p.price, realized, tax };
     pf.sales.push(sale);
     if (realized < 0) pf.minus.push({ id: "sale-" + sale.id, label: `vendita ${b ? b.name : p.isin}`, amount: -realized, year: parseInt(sale.date.slice(0, 4), 10) });

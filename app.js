@@ -1,9 +1,9 @@
-/* app.js — v0.7.1 — Bond Netto (PWA) */
+/* app.js — v0.8.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.7.1";
-  const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
+  const APP_VERSION = "0.8.0";
+  const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
   const fmtNum = (v, d = 2) => v == null ? "–" : v.toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -22,7 +22,7 @@
   function params(nominal) {
     const s = state.settings;
     return { commissionPct: s.commissionPct / 100, commissionMin: s.commissionMin, commissionMax: (s.commissionMax === "" || s.commissionMax == null) ? null : s.commissionMax,
-      bolloRate: s.bolloRate / 100, nominal: nominal ?? s.nominal };
+      bolloRate: s.bolloRate / 100, nominal: nominal ?? s.nominal, taxGov: (s.taxGov ?? 12.5) / 100, taxOther: (s.taxOther ?? 26) / 100 };
   }
 
   function fxRate(cur) {   // 1 EUR = x valuta (BCE); null se non disponibile
@@ -30,6 +30,8 @@
     return fx.rates[cur] ?? null;
   }
   const toEur = (v, cur) => { const r = fxRate(cur); return r ? v / r : null; };
+
+  function taxOf(b) { const s = state.settings; return (b.tax_rate <= 0.125001 ? (s.taxGov ?? 12.5) : (s.taxOther ?? 26)) / 100; }
 
   function category(b) {
     const t = (b.tipologia || "").toLowerCase();
@@ -66,7 +68,7 @@
       b._calc = (b.computable && b._price) ? Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: trade, ...params() }) : null;
       if (b._calc) {
         const cpn = b.kind === "zero" ? 0 : (b.coupon_annual || 0);
-        b._calc.coupon_net_yield = b._price ? cpn * (1 - b.tax_rate) / b._price : null;                     // flusso netto annuo in tasca
+        b._calc.coupon_net_yield = b._price ? cpn * (1 - taxOf(b)) / b._price : null;                     // flusso netto annuo in tasca
         b._calc.price_yield = (b._calc.ytm_net_all != null && b._calc.coupon_net_yield != null) ? b._calc.ytm_net_all - b._calc.coupon_net_yield : null;  // il resto: dal prezzo
       }
       b._uncertain = uncertainReason(b);
@@ -279,7 +281,7 @@
       ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtCur(p.volume_today, b.currency)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
       ["Valuta", b.currency], ["Scadenza", `${fmtDate(b.maturity)} (${fmtNum(b._years, 2)} anni)`],
       ["Cedola", b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% annuo, ${FREQ_LABEL[b.coupon_frequency] || b.coupon_frequency_label || "–"}`],
-      ["Lotto minimo", fmtCur(b.min_lot, b.currency)], ["Aliquota fiscale", `${fmtNum(b.tax_rate * 100, 1)}% (${esc(b.tax_reason)})`],
+      ["Lotto minimo", fmtCur(b.min_lot, b.currency)], ["Aliquota fiscale applicata", `${fmtNum(taxOf(b) * 100, 1)}% (${esc(b.tax_reason)}${Math.abs(taxOf(b) - b.tax_rate) > 1e-9 ? "; regime personalizzato nelle Impostazioni" : ""})`],
       ["Emesso", b.outstanding ? fmtCur(b.outstanding, b.currency) : "–"], ["Subordinato", b.subordinated || "–"], ["Segmento", b.segment],
     ];
     const biRows = bi.yield_gross != null ? `<h3>Dati Borsa Italiana (prezzo di riferimento)</h3><table class="kv">
@@ -307,8 +309,8 @@
       : q === "traded" ? `<div class="note">Nessuna proposta in vendita nel book al momento della rilevazione: calcolo sul prezzo di riferimento (titolo scambiato oggi).</div>` : "";
     return `<div class="kpis">
       <div class="kpi"><div class="l">Rendimento netto annuo (tasse, commissioni, bollo)</div><div class="v good">${fmtPct(c.ytm_net_all)}</div></div>
-      <div class="kpi"><div class="l">di cui da cedola (flusso netto / prezzo)</div><div class="v">${fmtPct(b._price ? (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - b.tax_rate) / b._price : null)}</div></div>
-      <div class="kpi"><div class="l">di cui da prezzo (a scadenza)</div><div class="v">${fmtPct(c.ytm_net_all != null && b._price ? c.ytm_net_all - (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - b.tax_rate) / b._price : null)}</div></div>
+      <div class="kpi"><div class="l">di cui da cedola (flusso netto / prezzo)</div><div class="v">${fmtPct(b._price ? (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - taxOf(b)) / b._price : null)}</div></div>
+      <div class="kpi"><div class="l">di cui da prezzo (a scadenza)</div><div class="v">${fmtPct(c.ytm_net_all != null && b._price ? c.ytm_net_all - (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - taxOf(b)) / b._price : null)}</div></div>
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)}</div></div>
 
     </div>${minus}${src}
@@ -413,13 +415,15 @@
     const s = state.settings;
     $("#s-nominal").value = s.nominal; $("#s-pct").value = s.commissionPct; $("#s-min").value = s.commissionMin;
     $("#s-max").value = s.commissionMax ?? ""; $("#s-bollo").value = s.bolloRate;
+    $("#s-taxgov").value = s.taxGov ?? 12.5; $("#s-taxother").value = s.taxOther ?? 26;
     $("#settings").classList.remove("hidden");
   }
   $("#s-save").addEventListener("click", () => {
     const num = (id, d) => { const v = parseFloat($(id).value); return isNaN(v) ? d : v; };
     const maxv = $("#s-max").value.trim();
     state.settings = { nominal: num("#s-nominal", DEFAULTS.nominal), commissionPct: num("#s-pct", DEFAULTS.commissionPct), commissionMin: num("#s-min", DEFAULTS.commissionMin),
-      commissionMax: maxv === "" ? null : parseFloat(maxv), bolloRate: num("#s-bollo", DEFAULTS.bolloRate) };
+      commissionMax: maxv === "" ? null : parseFloat(maxv), bolloRate: num("#s-bollo", DEFAULTS.bolloRate),
+      taxGov: num("#s-taxgov", DEFAULTS.taxGov), taxOther: num("#s-taxother", DEFAULTS.taxOther) };
     saveSettings(state.settings); $("#settings").classList.add("hidden"); recompute(); applyFilters();
   });
   // Profili commissioni verificati il 04/11/2026 (fonti: finecobank.com, qualebanca.com, finanzadigitale.com)
@@ -435,6 +439,11 @@
     $("#s-pct").value = pr.commissionPct; $("#s-min").value = pr.commissionMin; $("#s-max").value = pr.commissionMax;
   });
   ["#s-pct", "#s-min", "#s-max"].forEach(id => $(id).addEventListener("input", () => { $("#s-profile").value = ""; }));
+  $("#s-taxpreset").addEventListener("change", e => {
+    if (e.target.value === "it") { $("#s-taxgov").value = 12.5; $("#s-taxother").value = 26; $("#s-bollo").value = 0.2; }
+    if (e.target.value === "none") { $("#s-taxgov").value = 0; $("#s-taxother").value = 0; $("#s-bollo").value = 0; }
+  });
+  ["#s-taxgov", "#s-taxother", "#s-bollo"].forEach(id => $(id).addEventListener("input", () => { $("#s-taxpreset").value = ""; }));
   $("#s-reset").addEventListener("click", () => { state.settings = { ...DEFAULTS }; saveSettings(state.settings); openSettings(); });
 
   // ---------------- eventi ----------------

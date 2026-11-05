@@ -1,4 +1,4 @@
-/* yields.js — v0.3.0
+/* yields.js — v0.3.1
    Porting fedele di scraper/yields.py (compute) in JavaScript, per ricalcolare i
    rendimenti all-in nel browser con i parametri scelti dall'utente.
    Deve dare gli stessi numeri di Python a parità di input: vedi tools/check_js_vs_py.mjs. */
@@ -87,7 +87,10 @@
     const accrualStart = parseISO(bond.accrual_start);
     const firstCoupon = parseISO(bond.first_coupon_date);
     const years = (maturity - settle) / DAY / 365.0;
-    const tax = bond.tax_rate;
+    // aliquota: quella del titolo (12,5% Stato/sovranazionali, 26% altri), oppure quelle del regime scelto dall'utente
+    let tax = bond.tax_rate;
+    if (p.taxGov != null && p.taxOther != null) tax = (bond.tax_rate <= 0.125001) ? p.taxGov : p.taxOther;
+    if (p.taxOverride != null) tax = p.taxOverride;
     let couponAnnual = bond.coupon_annual || 0, freq = bond.coupon_frequency || 0;
     if (bond.kind === "zero") { couponAnnual = 0; freq = 0; }
     const price = p.price;
@@ -138,6 +141,6 @@
     };
   }
 
-  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.3.0" };
+  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.3.1" };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Yields = api;
 })(typeof window !== "undefined" ? window : globalThis);

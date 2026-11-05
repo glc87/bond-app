@@ -161,6 +161,13 @@
         <label>Commissione minima € <input id="s-min" type="number" step="0.5" min="0"></label>
         <label>Commissione massima € (vuoto = nessuna) <input id="s-max" type="number" step="0.5" min="0"></label>
         <label>Imposta di bollo % annuo <input id="s-bollo" type="number" step="0.01" min="0"></label>
+        <label>Regime fiscale <select id="s-taxpreset">
+          <option value="">Personalizzato</option>
+          <option value="it" selected>Italia, privato (12,5% Stato/sovranazionali, 26% altri, bollo 0,2%)</option>
+          <option value="none">Nessuna tassa né bollo (lordo, es. per confronto)</option>
+        </select></label>
+        <label>Aliquota titoli di Stato e sovranazionali % <input id="s-taxgov" type="number" step="0.1" min="0" max="100"></label>
+        <label>Aliquota altri emittenti % <input id="s-taxother" type="number" step="0.1" min="0" max="100"></label>
       </div>
       <div class="row">
         <button class="btn" id="s-save">Salva</button>
