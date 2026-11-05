@@ -2,8 +2,11 @@ name: Aggiornamento giornaliero bond
 
 on:
   schedule:
-    # 15:00 UTC = 16:00 ora italiana in inverno, 17:00 in estate. MOT aperto (chiude 17:30).
-    - cron: "0 15 * * 1-5"
+    # GitHub non garantisce l'orario dei cron (ritardi di ore, a volte salta): orari non "tondi" e un secondo tentativo.
+    # 15:07 UTC = 16:07 ora italiana in inverno (17:07 in estate); 16:37 UTC = 17:37 (18:37) come riserva.
+    # Il secondo tentativo viene saltato se i dati di oggi esistono già (step "Già aggiornato oggi?").
+    - cron: "7 15 * * 1-5"
+    - cron: "37 16 * * 1-5"
   workflow_dispatch:
     inputs:
       limit:
@@ -41,10 +44,19 @@ jobs:
 
       - run: pip install -r scraper/requirements.txt
 
+      - name: Già aggiornato oggi?
+        id: today
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          DONE=$(python -c "import json;m=json.load(open('data/meta.json'));print('yes' if m.get('trade_date')=='$TODAY' and m.get('n_total',0)>1000 else 'no')" 2>/dev/null || echo no)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$DONE" = "yes" ]; then echo "skip=true" >> $GITHUB_OUTPUT; echo "Dati di oggi già presenti: salto."; else echo "skip=false" >> $GITHUB_OUTPUT; fi
+
       - name: Test offline ed end-to-end (server finto)
+        if: steps.today.outputs.skip != 'true'
         run: python scraper/test_offline.py && python scraper/test_e2e.py
 
       - name: Esegui scraper e calcoli
+        if: steps.today.outputs.skip != 'true'
         run: |
           ARGS=""
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
@@ -53,6 +65,7 @@ jobs:
           python scraper/run_daily.py --delay 0.5 --workers 2 $ARGS
 
       - name: Riepilogo
+        if: steps.today.outputs.skip != 'true'
         run: |
           echo "## Risultato run" >> $GITHUB_STEP_SUMMARY
           python - <<'PY' >> $GITHUB_STEP_SUMMARY
@@ -62,7 +75,7 @@ jobs:
           PY
 
       - name: Avvisi -> Issue (email)
-        if: hashFiles('data/alerts_report.md') != ''
+        if: steps.today.outputs.skip != 'true' && hashFiles('data/alerts_report.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -75,6 +88,7 @@ jobs:
           fi
 
       - name: Commit dei dati
+        if: steps.today.outputs.skip != 'true'
         run: |
           git config user.name "bond-bot"
           git config user.email "bond-bot@users.noreply.github.com"
