@@ -43,3 +43,5 @@
 - app v0.6.1: un solo rendimento in evidenza (netto annuo all-in) con scomposizione "da cedola / da prezzo";
   ordinamenti ridotti a rendimento netto, cedola netta, guadagno da prezzo, scadenza, prezzo, nome; filtro cedola netta min.
   Le altre misure (YTM lordo, netto solo tasse, semplice) restano solo nella scheda per confronto con altri siti.
+- 2026-11-05: run schedulato di ieri sera fallito (fetch_ecb_rates persa in un refactor): ripristinata; nuovo test_e2e.py
+  (server finto, main() eseguita davvero) nel workflow prima dello scraping.

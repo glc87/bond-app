@@ -37,6 +37,9 @@ jobs:
 
       - run: pip install -r scraper/requirements.txt
 
+      - name: Test offline ed end-to-end (server finto)
+        run: python scraper/test_offline.py && python scraper/test_e2e.py
+
       - name: Esegui scraper e calcoli
         run: |
           ARGS=""

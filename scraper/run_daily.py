@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.5.0
+run_daily.py — v0.5.1
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -28,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -226,6 +226,24 @@ def update_series(out: Path, trade_date: date, hist: list, max_points: int = 150
             pts.sort(key=lambda pt: pt[0])
             data[h["isin"]] = pts[-max_points:]
         f.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+
+
+ECB_FX_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+
+
+def fetch_ecb_rates(client: "bi.Client") -> dict:
+    """Tassi di cambio di riferimento BCE (1 EUR = x valuta), pubblicati ogni giorno lavorativo alle 16:00 CET."""
+    try:
+        xml = client.get(ECB_FX_URL)
+        root = ET.fromstring(xml)
+        ns = {"e": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"}
+        day = root.find(".//e:Cube[@time]", ns)
+        rates = {c.get("currency"): float(c.get("rate")) for c in day.findall("e:Cube", ns)}
+        rates["EUR"] = 1.0
+        return {"date": day.get("time"), "base": "EUR", "rates": rates, "source": ECB_FX_URL}
+    except Exception as e:
+        log.warning("Cambi BCE non disponibili: %s", e)
+        return {"date": None, "base": "EUR", "rates": {"EUR": 1.0}, "source": ECB_FX_URL, "error": str(e)}
 
 
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()
