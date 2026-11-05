@@ -1,10 +1,10 @@
 {
-  "run_at": "2026-11-05T14:10:27.109363+00:00",
+  "run_at": "2026-11-05T14:45:49.200728+00:00",
   "trade_date": "2026-11-05",
   "versions": {
-    "run_daily": "0.5.1",
+    "run_daily": "0.7.0",
     "borsa_italiana": "0.3.0",
-    "yields": "0.2.2"
+    "yields": "0.3.1"
   },
   "cost_params_default": {
     "commission_pct": 0.0019,
@@ -50,62 +50,35 @@
     },
     "source": "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
   },
-  "n_total": 1821,
-  "n_computable": 1487,
+  "n_total": 60,
+  "n_computable": 21,
   "n_failed": 0,
   "by_kind": {
-    "fixed": 1237,
-    "zero": 251,
-    "inflation": 43,
-    "stepup": 83,
-    "floating": 118,
-    "callable": 88,
-    "unknown": 1
+    "callable": 39,
+    "fixed": 21
   },
   "by_segment": {
-    "euro-obbligazioni": 1497,
-    "obbligazioni-euro": 73,
-    "btp": 226,
-    "cct": 9,
-    "bot": 16
+    "eurotlx:CORPORATE_BONDS": 60
+  },
+  "by_market": {
+    "ETLX": 60
+  },
+  "n_both_markets": 0,
+  "versions_extra": {
+    "eurotlx": "0.1.0"
   },
   "by_currency": {
-    "EUR": 1244,
-    "AUD": 10,
-    "CAD": 8,
-    "CHF": 12,
-    "GBP": 36,
-    "SEK": 18,
-    "NOK": 12,
-    "BRL": 47,
-    "INR": 12,
-    "PLN": 17,
-    "HUF": 12,
-    "TRY": 50,
-    "USD": 237,
-    "CNY": 10,
-    "NZD": 5,
-    "ZAR": 41,
-    "ITL": 1,
-    "MXN": 38,
-    "RUB": 4,
-    "IDR": 4,
-    "PHP": 2,
-    "RON": 1
+    "EUR": 60
   },
   "price_source": {
-    "ask": 1659,
-    "ref": 162
+    "ask": 60
   },
   "price_quality": {
-    "ask": 1659,
-    "stale": 109,
-    "quiet": 52,
-    "traded": 1
+    "ask": 60
   },
-  "n_with_anomalies": 302,
-  "n_tax_not_confirmed": 17,
+  "n_with_anomalies": 0,
+  "n_tax_not_confirmed": 0,
   "failed": [],
-  "requests": 3742,
-  "duration_s": 2060.4
+  "requests": 366,
+  "duration_s": 189.0
 }
