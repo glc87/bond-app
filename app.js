@@ -1,8 +1,8 @@
-/* app.js — v0.8.0 — Bond Netto (PWA) */
+/* app.js — v0.8.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.8.0";
+  const APP_VERSION = "0.8.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -71,6 +71,7 @@
         b._calc.coupon_net_yield = b._price ? cpn * (1 - taxOf(b)) / b._price : null;                     // flusso netto annuo in tasca
         b._calc.price_yield = (b._calc.ytm_net_all != null && b._calc.coupon_net_yield != null) ? b._calc.ytm_net_all - b._calc.coupon_net_yield : null;  // il resto: dal prezzo
       }
+      b._liq = b.liquidity && b.liquidity.days >= 3 ? b.liquidity.score : null;   // significativo solo con qualche giorno di storico
       b._uncertain = uncertainReason(b);
       b._strip = isStrip(b);
     }
@@ -122,6 +123,7 @@
         case "coupon": return b.coupon_annual;
         case "name": return b.name;
         case "coupon_net_yield": case "price_yield": case "ytm_net_all": case "spread_bund": return b._calc ? b._calc[key] : null;
+        case "liq": return b._liq;
         default: return b._calc ? b._calc[key] : null;
       }
     };
@@ -162,7 +164,7 @@
   function cardHTML(b) {
     const c = b._calc;
     const cpn = b.kind === "zero" ? "zero coupon" : (b.coupon_annual != null ? `${fmtNum(b.coupon_annual)}% ${FREQ_LABEL[b.coupon_frequency] || ""}` : KIND_LABEL[b.kind]);
-    const minus = (b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "") + (b._uncertain ? ' <span class="badge stale" title="' + esc(b._uncertain) + '">incerto</span>' : "") + (b._strip ? ' <span class="badge cur">strip</span>' : "");
+    const minus = (b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "") + (b._liq != null && b._liq < 0.5 ? ` <span class="badge warn" title="venditore presente in ${Math.round(b._liq * 100)}% delle ultime ${b.liquidity.days} rilevazioni">poco liquido</span>` : "") + (b._uncertain ? ' <span class="badge stale" title="' + esc(b._uncertain) + '">incerto</span>' : "") + (b._strip ? ' <span class="badge cur">strip</span>' : "");
     const sel = state.compare.has(b.isin);
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
@@ -278,6 +280,7 @@
     const rows = [
       ["Prezzo usato", `${fmtNum(b._price)} ${priceBadge(b)}`], ["Ask / Bid", `${fmtNum(p.ask)} (${fmtNum(p.ask_qty, 0)}) / ${fmtNum(p.bid)} (${fmtNum(p.bid_qty, 0)})`],
       ["Prezzo di riferimento", `${fmtNum(p.ref)} del ${fmtDate(p.ref_date)}`], ["Ultimo contratto", `${fmtNum(p.last)} ${esc(p.last_time || "")}`],
+      ["Liquidità (ultime rilevazioni)", b.liquidity ? `${b.liquidity.ask_days} su ${b.liquidity.days} giorni con un venditore nel book${b.liquidity.days < 3 ? " (storico ancora breve)" : ""}` : "–"],
       ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtCur(p.volume_today, b.currency)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
       ["Valuta", b.currency], ["Scadenza", `${fmtDate(b.maturity)} (${fmtNum(b._years, 2)} anni)`],
       ["Cedola", b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% annuo, ${FREQ_LABEL[b.coupon_frequency] || b.coupon_frequency_label || "–"}`],

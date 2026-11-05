@@ -54,6 +54,7 @@ def main():
     rec = d["bonds"][0]
     assert rec["computable"] and rec["calc"]["ytm_gross"] is not None and rec["price"]["quality"] == "ask"
     assert "first_coupon_date" in rec
+    assert rec["liquidity"]["days"] == 1 and rec["liquidity"]["ask_days"] == 1 and rec["liquidity"]["score"] == 1.0
     assert (out / "meta.json").exists() and list((out / "history").glob("*.json")) and list((out / "series").glob("*.json"))
     fired = json.loads((out / "alerts_fired.json").read_text(encoding="utf-8"))
     assert fired["fired"] and (out / "alerts_report.md").read_text(encoding="utf-8").startswith("Avvisi")

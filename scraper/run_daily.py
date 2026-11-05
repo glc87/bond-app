@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.5.2
+run_daily.py — v0.6.0
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -28,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.5.2"
+VERSION = "0.6.0"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -246,6 +246,25 @@ def fetch_ecb_rates(client: "bi.Client") -> dict:
         return {"date": None, "base": "EUR", "rates": {"EUR": 1.0}, "source": ECB_FX_URL, "error": str(e)}
 
 
+def liquidity_from_history(out: Path, trade_date: date, records: list, days: int = 20) -> None:
+    """Per ogni titolo: su quante delle ultime `days` rilevazioni (compresa oggi) c'era un ask nel book.
+    Scrive rec["liquidity"] = {"days": n, "ask_days": k, "score": k/n}. Fonte: data/history/*.json (campo src)."""
+    files = sorted((out / "history").glob("*.json"))
+    files = [f for f in files if f.stem < trade_date.isoformat()][-(days - 1):]
+    ask_days: dict[str, int] = {}
+    for f in files:
+        try:
+            for h in json.loads(f.read_text(encoding="utf-8")):
+                if h.get("src") == "ask":
+                    ask_days[h["isin"]] = ask_days.get(h["isin"], 0) + 1
+        except Exception as e:
+            log.warning("history %s illeggibile: %s", f.name, e)
+    n = len(files) + 1
+    for r in records:
+        k = ask_days.get(r["isin"], 0) + (1 if r["price"]["source"] == "ask" else 0)
+        r["liquidity"] = {"days": n, "ask_days": k, "score": round(k / n, 3)}
+
+
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()
     t = (rec.get("tipologia") or "").lower()
     if t == "titoli di stato italiani": return "gov_it"
@@ -354,6 +373,7 @@ def main(argv=None):
                 log.info("%d/%d titoli elaborati (%d richieste)", done, len(rows), client.n_requests)
     records.sort(key=lambda r: r["isin"])
 
+    liquidity_from_history(out, trade_date, records)
     computable = [r for r in records if r["computable"]]
     meta = {
         "run_at": datetime.now(timezone.utc).isoformat(),
