@@ -62,6 +62,10 @@ jobs:
           if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
           if [ -n "${{ github.event.inputs.segments }}" ]; then ARGS="$ARGS --segments ${{ github.event.inputs.segments }}"; fi
           if [ -n "${{ github.event.inputs.sources }}" ]; then ARGS="$ARGS --sources ${{ github.event.inputs.sources }}"; fi
+          # Un run di prova (limit o sources parziali) NON deve sovrascrivere i dati pubblicati: scrive in data_test/
+          if [ -n "${{ github.event.inputs.limit }}" ] || [ -n "${{ github.event.inputs.sources }}" ] || [ -n "${{ github.event.inputs.segments }}" ]; then
+            ARGS="$ARGS --out data_test"; echo "Run di prova: output in data_test/ (non pubblicato)"
+          fi
           python scraper/run_daily.py --delay 0.5 --workers 2 $ARGS
 
       - name: Riepilogo
@@ -69,7 +73,7 @@ jobs:
         run: |
           echo "## Risultato run" >> $GITHUB_STEP_SUMMARY
           python - <<'PY' >> $GITHUB_STEP_SUMMARY
-          import json; m=json.load(open('data/meta.json'))
+          import json, os; m=json.load(open('data_test/meta.json' if os.path.isdir('data_test') else 'data/meta.json'))
           for k in ['trade_date','n_total','n_computable','n_failed','n_with_anomalies','n_tax_not_confirmed','requests','duration_s','price_quality','by_market','n_both_markets','by_kind','by_currency']:
               print(f"- **{k}**: `{m.get(k)}`")
           PY
@@ -88,7 +92,7 @@ jobs:
           fi
 
       - name: Commit dei dati
-        if: steps.today.outputs.skip != 'true'
+        if: steps.today.outputs.skip != 'true' && hashFiles('data_test/meta.json') == ''
         run: |
           git config user.name "bond-bot"
           git config user.email "bond-bot@users.noreply.github.com"
