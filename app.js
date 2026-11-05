@@ -1,8 +1,8 @@
-/* app.js — v0.7.0 — Bond Netto (PWA) */
+/* app.js — v0.7.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.7.0";
+  const APP_VERSION = "0.7.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -232,6 +232,21 @@
     state.compare.delete(u.dataset.uncmp); render();
     if (state.compare.size >= 2) openCompare(); else $("#compare").classList.add("hidden");
   });
+
+  async function renderAuctions() {
+    const el = $("#auctions"); if (!el) return;
+    try {
+      const r = await fetch("data/aste.json", { cache: "no-cache" }); if (!r.ok) return;
+      const a = await r.json();
+      const today = new Date().toISOString().slice(0, 10);
+      const next = a.auctions.filter(x => x.date >= today).slice(0, 6);
+      if (!next.length) { el.innerHTML = `<p class="hint">Calendario aste ${a.year} esaurito: <a href="${a.mef_url}" target="_blank" rel="noopener">calendario MEF ↗</a></p>`; return; }
+      const dayName = d => new Date(d).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+      el.innerHTML = `<details><summary>Prossime aste del Tesoro <span class="small">(${dayName(next[0].date)}: ${esc(next[0].label)})</span></summary>
+        <table class="kv">${next.map(x => `<tr><td>${dayName(x.date)}${x.settlement ? ` <span class="small">· regolamento ${dayName(x.settlement)}</span>` : ""}</td><td>${esc(x.label)}</td></tr>`).join("")}</table>
+        <p class="hint">${esc(a.note)} <a href="${a.mef_url}" target="_blank" rel="noopener">Calendario e comunicati MEF ↗</a></p></details>`;
+    } catch {}
+  }
 
   function renderBest() {
     const buckets = [["Fino a 2 anni", 0, 2], ["2–5 anni", 2, 5], ["5–10 anni", 5, 10], ["10–20 anni", 10, 20], ["Oltre 20 anni", 20, 1e9]];
@@ -463,6 +478,7 @@
       const runAt = new Date(d.meta.run_at);
       $("#meta").textContent = `${d.meta.n_total} titoli MOT · rilevazione ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} con rendimento`;
       applyFilters();
+      renderAuctions();
       if (window.BondAlerts) BondAlerts.evaluateAll();
     } catch (e) {
       $("#meta").textContent = "Dati non disponibili: " + e.message;

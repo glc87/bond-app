@@ -139,3 +139,8 @@ button.copy { border: 1px solid var(--line); background: var(--card); color: var
 .icon-btn.has { border-color: var(--good); box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 35%, transparent); }
 .inline-form select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font-size: 14px; }
 a.btn { text-decoration: none; display: inline-block; }
+.auctions { padding: 6px 0 0; }
+.auctions summary { cursor: pointer; font-size: 13.5px; color: var(--ink); padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.auctions details[open] summary { border-radius: var(--radius) var(--radius) 0 0; }
+.auctions table { background: var(--card); border: 1px solid var(--line); border-top: 0; padding: 4px 12px; }
+.auctions .hint { padding: 0 4px; }

@@ -50,3 +50,4 @@
   1306/1387 entro 0,01; EUR 98,9% entro 0,02. "Data stacco prima cedola" di BI coincide sempre col godimento (campo inutile):
   la gestione prima cedola irregolare resta nel codice ma è inattiva. Dove il rateo BI differisce (Bund 3,4% 2047, Romania USD,
   Svezia) lo YTM coincide entro 0,005: il campo rateo BI su quei titoli usa una convenzione diversa; non si insegue oltre.
+- app v0.7.1: sezione 'Prossime aste del Tesoro' da data/aste.json (calendario MEF 2026, 57 aste; da rinnovare a gennaio 2027).
