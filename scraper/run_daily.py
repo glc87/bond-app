@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.1
+run_daily.py — v0.7.2
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -165,6 +165,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
                 r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date)
                 if r_ref.ytm_gross is not None:
                     chk["ytm_gross_vs_bi"] = round(r_ref.ytm_gross * 100 - s.bi_yield_gross, 3)
+                    chk["ytm_gross_on_ref"] = round(r_ref.ytm_gross * 100, 3)
                 if s.bi_accrued_gross is not None:
                     chk["accrued_vs_bi"] = round(r_ref.accrued_gross - s.bi_accrued_gross, 5)
                 if r_ref.ytm_net_bi_convention is not None and s.bi_yield_net is not None:
@@ -196,6 +197,12 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
             r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, True, s.first_coupon_date)
             rec["calc"] = y.result_to_dict(r)
             rec["check"] = chk
+            # Zero coupon richiamabili quotati vicino alla pari con vita lunga (Citigroup/GS "Gm Zc ... Call", run 05/11/2026):
+            # non sono veri zero coupon ma strutture con rimborso crescente (BI pubblica 4-6%, il prezzo implica <1%).
+            # Un vero ZC a 20 anni a 95 renderebbe lo 0,25%: non plausibile -> non calcolabile.
+            if cls.kind == "zero" and " call" in f" {s.name.lower()} " and r.ytm_gross is not None and r.ytm_gross < 0.015 and r.years_to_maturity > 5:
+                rec["computable"] = False; rec["kind"] = "structured"; rec["calc"] = None
+                rec["not_computable_reason"] = "zero coupon richiamabile con rimborso crescente (struttura): rendimento non determinabile dal prezzo"
         except Exception as e:  # mai far cadere il run per un titolo
             rec["computable"] = False
             rec["not_computable_reason"] = f"errore di calcolo: {e}"
@@ -273,6 +280,45 @@ def liquidity_from_history(out: Path, trade_date: date, records: list, days: int
     for r in records:
         k = ask_days.get(r["isin"], 0) + (1 if r["price"]["source"] == "ask" else 0)
         r["liquidity"] = {"days": n, "ask_days": k, "score": round(k / n, 3)}
+
+
+def bi_yield_lag_check(out: Path, trade_date: date, records: list) -> dict:
+    """Ipotesi da verificare (run 05/11/2026): su EuroTLX il rendimento pubblicato da Borsa Italiana non combacia
+    col prezzo di riferimento del giorno (mediana -0,04, solo 19% entro 0,02; su MOT 97%). Se BI pubblica il
+    rendimento calcolato sul riferimento del giorno PRIMA, allora BI(oggi) ~= nostro YTM(rif di ieri).
+    Scrive check["bi_vs_prev_ref"] = BI oggi - nostro YTM sul riferimento di ieri (dal file history di ieri)
+    e ritorna il riepilogo per mercato."""
+    files = sorted(f for f in (out / "history").glob("*.json") if f.stem < trade_date.isoformat())
+    if not files:
+        return {}
+    try:
+        prev = {h["isin"]: h for h in json.loads(files[-1].read_text(encoding="utf-8")) if h.get("yr") is not None}
+    except Exception as e:
+        log.warning("history %s illeggibile: %s", files[-1].name, e); return {}
+    out_stats: dict[str, dict] = {}
+    for r in records:
+        bg = r["bi"].get("yield_gross"); p = prev.get(r["isin"])
+        if bg is None or p is None or not r.get("computable"):
+            continue
+        d = round(bg - p["yr"], 3)
+        r["check"]["bi_vs_prev_ref"] = d
+        st = out_stats.setdefault(r["market"], {"n": 0, "within_0_02": 0, "deltas": []})
+        st["n"] += 1; st["within_0_02"] += abs(d) <= 0.02; st["deltas"].append(d)
+    for m, st in out_stats.items():
+        ds = sorted(st.pop("deltas")); st["median"] = ds[len(ds) // 2] if ds else None; st["prev_file"] = files[-1].stem
+    return out_stats
+
+
+def bi_check_summary(records: list, bi_lag: dict) -> dict:
+    """Riepilogo per mercato dell'accordo col rendimento lordo pubblicato da BI (titoli con vita residua > 6 mesi)."""
+    res = {}
+    for m in sorted({r["market"] for r in records}):
+        ds = sorted(r["check"]["ytm_gross_vs_bi"] for r in records if r["market"] == m
+                    and r["check"].get("ytm_gross_vs_bi") is not None and (r.get("calc") or {}).get("years_to_maturity", 0) > 0.5)
+        if ds:
+            res[m] = {"n": len(ds), "within_0_02": sum(abs(d) <= 0.02 for d in ds), "beyond_0_25": sum(abs(d) > 0.25 for d in ds),
+                      "median": ds[len(ds) // 2], "vs_prev_ref": bi_lag.get(m)}
+    return res
 
 
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()
@@ -407,6 +453,7 @@ def main(argv=None):
     log.info("Titoli unici: %d (%d presenti su entrambi i mercati)", len(records), n_dup)
 
     liquidity_from_history(out, trade_date, records)
+    bi_lag = bi_yield_lag_check(out, trade_date, records)
     computable = [r for r in records if r["computable"]]
     meta = {
         "run_at": datetime.now(timezone.utc).isoformat(),
@@ -425,6 +472,7 @@ def main(argv=None):
         "price_quality": dict(Counter(r["price"]["quality"] for r in records)),
         "n_with_anomalies": sum(1 for r in records if r["anomalies"]),
         "n_tax_not_confirmed": sum(1 for r in records if r["check"].get("tax_rate_confirmed") is False),
+        "bi_check": bi_check_summary(records, bi_lag),
         "failed": failed,
         "requests": client.n_requests,
         "duration_s": round(time.time() - t0, 1),
@@ -433,7 +481,9 @@ def main(argv=None):
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     hist = [{"isin": r["isin"], "p": r["price"]["used"], "src": r["price"]["source"],
              "yg": (r["calc"] or {}).get("ytm_gross"), "yn": (r["calc"] or {}).get("ytm_net_tax"),
-             "sn": (r["calc"] or {}).get("simple_net_all")} for r in records]
+             "sn": (r["calc"] or {}).get("simple_net_all"),
+             # per la verifica del giorno dopo (bi_yield_lag_check): prezzo di riferimento, nostro YTM su quel prezzo, YTM pubblicato da BI
+             "rf": r["price"].get("ref"), "yr": r["check"].get("ytm_gross_on_ref"), "bg": r["bi"].get("yield_gross")} for r in records]
     (out / "history" / f"{trade_date.isoformat()}.json").write_text(json.dumps(hist, separators=(",", ":")), encoding="utf-8")
     update_series(out, trade_date, hist)
     # --- avvisi (alerts.json nella root del repository, esportato dall'app)

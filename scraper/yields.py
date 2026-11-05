@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.2
+yields.py — v0.3.3
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -125,7 +125,7 @@ def add_months(d: date, months: int) -> date:
 # ----------------------------------------------------------------------------
 @dataclass
 class BondClass:
-    kind: str          # "fixed" | "zero" | "floating" | "inflation" | "stepup" | "callable" | "unknown"
+    kind: str          # "fixed" | "zero" | "floating" | "inflation" | "stepup" | "callable" | "structured" | "amortizing" | "unknown"
     computable: bool
     reason: str
 
@@ -139,6 +139,20 @@ def classify(name: str, tipologia: str, structure: str, tipo_bond: str,
     if (any(k in n for k in [" btp italia", " btp€i", " btpi ", " btpi-", " btp i ", " oat€i", " oatei", " oati ", " bundei", " bobl i", " obligacionesei", " bonosei", "infl", " index", " ei "])
             or re.search(r"\b(btp|oat|bund|obligaciones|bonos|gilt|treasury)\s?(€i|ei|il|i)\b", n) or "inflation" in st or "linker" in n):
         return BondClass("inflation", False, "indicizzato all'inflazione: rendimento dipende dall'inflazione futura")
+    # strutturati / indicizzati a fondi, indici, tassi swap (CMS/CMT), credit linked, autocallable, zero coupon
+    # richiamabili (accreting): il rendimento a scadenza non è determinabile dal solo prezzo (run 05/11/2026,
+    # EuroTLX: scarti fino a 6-7 punti vs Borsa Italiana, che usa formule a sua discrezione)
+    # (" cap" solo con fix/float/euribor: "Bmw Us Cap", "Tim Cap" sono emittenti; "fund" non deve prendere "Funding")
+    if (any(k in n for k in [" cms", " cmt", "cap&floor", "autocall", "ind link", "indlink", "eq link", "credit linked",
+                             "asset future", " istx", " rv ", " multi coupon", " fix to ", " fix float", "reverse", "equity"])
+            or re.search(r"\b(fix|float|euribor)\b.*\bcap\b", n) or re.search(r"\bfund\b", n)
+            or "multi coupon" in st or "strutturat" in tb or "structured" in st):
+        return BondClass("structured", False, "strutturato (indice/fondo/CMS/autocall): rendimento non determinabile dal prezzo")
+    if " perp" in n or "perpetu" in st:
+        return BondClass("structured", False, "perpetuo: senza scadenza, il rendimento a scadenza non è definito")
+    # ammortizzanti / sinkable: rimborso del capitale a rate, il piano non è nelle pagine BI
+    if " sink" in n or " amort" in n or "amortiz" in st or "ammort" in tb:
+        return BondClass("amortizing", False, "rimborso a rate (ammortamento/sinkable): piano di rimborso non disponibile")
     if any(k in n for k in [" cct", " mc ", " fr ", " tv ", " float", " tm "]) or "floating" in tb or "variabile" in tb or "tv" in tb.split():
         return BondClass("floating", False, "tasso variabile: cedole future non note")
     if any(k in n for k in [" valore", " futura", " più", " piu ", " step", " sc ", " oc ", " su "]) or "step" in st or "step" in tb:

@@ -1,8 +1,8 @@
-/* app.js — v0.9.1 — Bond Netto (PWA) */
+/* app.js — v0.9.2 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.9.1";
+  const APP_VERSION = "0.9.2";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -41,7 +41,7 @@
     return "other";
   }
   const CAT_LABEL = { gov_it: "Stato Italia", gov_fx: "Stato estero", supra: "Sovranazionale", other: "Corporate/altro" };
-  const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up/strutturato", callable: "callable", unknown: "altro" };
+  const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up", callable: "callable", structured: "strutturato", amortizing: "ammortamento", unknown: "altro" };
   const FREQ_LABEL = { 1: "annuale", 2: "semestrale", 4: "trimestrale", 12: "mensile" };
 
   // Curva Bund: titoli di Stato tedeschi a tasso fisso in EUR con prezzo affidabile -> (anni, YTM lordo), interpolazione lineare

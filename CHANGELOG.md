@@ -55,3 +55,16 @@
 - eurotlx.py v0.1.0 + run_daily v0.7.0: seconda fonte EuroTLX (~2.000 titoli: corporate, bancari, emergenti, Treasury USA...),
   stesse strutture dati del MOT, merge per ISIN (ask più basso vince, entrambi i mercati annotati), tipologie EuroTLX
   mappate per aliquota e categoria. app v0.9.0: badge e filtro mercato, altro mercato in scheda, diagnostica.
+- 2026-11-05 run 19:00 (MOT + EuroTLX, ~70'): 3.672 titoli (MOT 1.814, ETLX 1.858, 116 su entrambi), 2.801 calcolabili, 0 falliti.
+  Verifica YTM lordo vs BI (>6 mesi): MOT 1.420/1.469 entro 0,02; EuroTLX solo 219/1.156 (mediana -0,04). Analisi:
+  * nessuna convenzione alternativa (settle T+0, compounding periodico, 30/360, prezzo bid/ask/mid/ultimo) spiega lo scarto
+    EuroTLX: alcuni titoli coincidono al centesimo (Wienerberger 4,22), altri no (Daimler 3,776 vs 3,82) con lo stesso prezzo
+    di riferimento. Ipotesi: BI pubblica su EuroTLX il rendimento calcolato sul riferimento del giorno prima.
+  * yields v0.3.3: nuove classi 'structured' (CMS/CMT, Fix To, cap&floor, autocall, Ind/Eq Link, credit linked, fondi,
+    'Rv', multi coupon, perpetui) e 'amortizing' (Sink/Amort: Argentina, Uruguay, Perù, Pemex, Ipi): non calcolabili.
+    Prima erano calcolati come fissi/callable con scarti da BI fino a 7 punti (Argentina 0,125% Sink: 6,7% vs 13,6% BI).
+  * run_daily v0.7.2: zero coupon richiamabili quotati vicino alla pari con vita >5 anni (Citigroup/GS 'Gm Zc Call', prezzo
+    implica <1,5% vs 4-6% BI) -> strutturati, non calcolabili. I ZC callable EBRD/ADB in TRY/ZAR/MXN restano calcolati
+    (coincidono con BI entro 0,03). Nuovo check 'bi_vs_prev_ref' e riepilogo meta.bi_check per mercato: dal run di domani
+    si verifica l'ipotesi del riferimento di ieri (history ora salva rif, YTM su rif e YTM BI).
+  * 22 'tipologia non riconosciuta' -> 21 ora strutturati; resta Eib-99/29 Multi Coupon (strutturato).

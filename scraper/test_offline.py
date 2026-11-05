@@ -1,5 +1,5 @@
 """
-test_offline.py — v0.1.1
+test_offline.py — v0.1.2
 Test offline su pagine campione reali (fixtures/ prelevate il 04/11/2026).
 Esegui:  python scraper/test_offline.py
 """
@@ -56,6 +56,18 @@ def test_classify():
     c = y.classify("Kme Group Tf 5% St27 Call Eur", "Obbligazioni", "", "", 5.0, 2); assert c.kind == "callable" and c.computable and c.reason
     assert y.classify("Btp Valore Gn27 Eur", "Titoli di stato italiani", "", "", 4.0, 4).kind == "stepup"
     assert y.classify("Austria Tf 2,4% Mg34 Eur", "Titoli di stato esteri", "Plain Vanilla", "", 2.4, 1).computable
+    # strutturati / ammortizzanti / perpetui (run 05/11/2026 su EuroTLX)
+    assert y.classify("Argentina 0.125% Call Sink 09lg30", "Titoli di Stato Emergenti", "", "", 0.125, 2).kind == "amortizing"
+    assert y.classify("Uruguay Fx 4.375% Oct27 Amort Usd", "Titoli di Stato Emergenti", "", "", 4.375, 2).kind == "amortizing"
+    assert y.classify("Ucg-Fix To Cms Call Sub 15ge32", "Obbligazioni Finanziarie", "", "", 6.0, 1).kind == "structured"
+    assert y.classify("Barclaysbank Indlink Jul38 Autocall Eur", "Altri Titoli di Debito", "", "", None, 1).kind == "structured"
+    assert y.classify("Db - Pimco Gis Income Fund 01mz28", "Obbligazioni Finanziarie", "", "", None, 1).kind == "structured"
+    assert y.classify("Isp-Fix To Cms Sub Perpetual Call Eur", "Obbligazioni Finanziarie", "", "", 5.0, 1).kind == "structured"
+    # ma non falsi positivi: "Cap" come emittente, "Funding", sukuk, "Sdg Linked"
+    assert y.classify("Bmw Us Cap Fx 3% Nov27 Eur", "Obbligazioni Corporate", "", "", 3.0, 1).kind == "fixed"
+    assert y.classify("Glencore Funding 3.875% Call 27ot27", "Obbligazioni Corporate", "", "", 3.875, 2).kind == "callable"
+    assert y.classify("Eni Sdg Linked Tf 4,3% Fb28 Eur", "Obbligazioni Corporate", "", "", 4.3, 1).kind == "fixed"
+    assert y.classify("Ebrd Zc Jun36 Call Zar", "Obbligazioni Sovranazionali", "", "", None, 1).kind == "callable"
 
 
 def test_zero_coupon_bi_convention():
