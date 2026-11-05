@@ -1,8 +1,8 @@
-/* app.js — v0.9.3 — Bond Netto (PWA) */
+/* app.js — v0.9.4 — Bond Netto (PWA) */
 (() => {
   "use strict";
-  const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.9.3";
+  const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
+  const APP_VERSION = "0.9.4";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -110,8 +110,32 @@
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur && cur !== "EUR" ? cur : "", country, market, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", showInst ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
-    $("#filter-count").textContent = n ? `(${n} attivi)` : "";
+    // Filtri attivi (diversi dal default): chip rimovibili sotto il pannello, campi evidenziati, conteggio live nel pannello.
+    const kindLabel = { nocall: "senza richiamabili", fixed: "solo tasso fisso", zero: "solo zero coupon", all: "anche non calcolabili" };
+    const active = [];
+    const add = (id, label, value, reset) => { active.push({ id, label, value, reset }); };
+    if (cur !== "EUR") add("f-cur", "Valuta", cur || "tutte", () => { $("#f-cur").value = "EUR"; });
+    if (country) add("f-country", "Paese", country, () => { $("#f-country").value = ""; });
+    if (market) add("f-market", "Mercato", market === "ETLX" ? "EuroTLX" : market, () => { $("#f-market").value = ""; });
+    if (kind !== "computable") add("f-kind", "Tipo", kindLabel[kind] || kind, () => { $("#f-kind").value = "computable"; });
+    if (!isNaN(ymin) && ymin !== 1) add("f-ymin", "Scadenza min", `${fmtNum(ymin)} anni`, () => { $("#f-ymin").value = "1"; });
+    if (!isNaN(ymax)) add("f-ymax", "Scadenza max", `${fmtNum(ymax)} anni`, () => { $("#f-ymax").value = ""; });
+    if (!isNaN(nmin)) add("f-nmin", "Netto min", `${fmtNum(nmin)}%`, () => { $("#f-nmin").value = ""; });
+    if (!isNaN(cmin)) add("f-cmin", "Cedola netta min", `${fmtNum(cmin)}%`, () => { $("#f-cmin").value = ""; });
+    if (!isNaN(lot)) add("f-lot", "Lotto max", fmtNum(lot, 0), () => { $("#f-lot").value = ""; });
+    if (showInst) add("f-inst", "Lotti istituzionali", "mostrati", () => { $("#f-inst").checked = false; });
+    if (showUncertain) add("f-uncertain", "Incerti", "mostrati", () => { $("#f-uncertain").checked = false; });
+    if (showStrips) add("f-strips", "Strip", "mostrati", () => { $("#f-strips").checked = false; });
+    if (onlyAsk) add("f-ask", "Solo ask", "sì", () => { $("#f-ask").checked = false; });
+    if (noMinus) add("f-nominus", "Sopra la pari", "esclusi", () => { $("#f-nominus").checked = false; });
+    n = active.length;
+    $("#filter-count").textContent = n ? `· ${n} ${n === 1 ? "attivo" : "attivi"}` : "";
+    $("#filter-live").textContent = `${state.filtered.length} titoli corrispondono` + (n ? ` (${n} ${n === 1 ? "filtro attivo" : "filtri attivi"})` : " (filtri di default)");
+    $$(".grid input, .grid select, .grid label.check").forEach(el => el.classList.remove("set"));
+    active.forEach(a => { const el = $("#" + a.id); el.classList.add("set"); if (el.type === "checkbox") el.closest("label").classList.add("set"); });
+    state.activeFilters = active;
+    $("#active-filters").innerHTML = active.map((a, i) => `<button type="button" class="chip" data-af="${i}" title="togli questo filtro">${esc(a.label)}<b>${esc(a.value)}</b> ×</button>`).join("")
+      + (active.length > 1 ? `<button type="button" class="chip" data-af="all" title="torna ai filtri di default">Azzera tutti ×</button>` : "");
     sortList();
     state.shown = PAGE;
     render();
@@ -478,6 +502,14 @@
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
   ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
+  function resetFilters() { (state.activeFilters || []).forEach(a => a.reset()); applyFilters(); }
+  $("#filter-reset").addEventListener("click", resetFilters);
+  $("#filter-close").addEventListener("click", () => { $("details.more").removeAttribute("open"); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  $("#active-filters").addEventListener("click", e => {
+    const btn = e.target.closest("[data-af]"); if (!btn) return;
+    if (btn.dataset.af === "all") return resetFilters();
+    const a = (state.activeFilters || [])[+btn.dataset.af]; if (a) { a.reset(); applyFilters(); }
+  });
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

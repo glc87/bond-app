@@ -70,3 +70,6 @@
   * 22 'tipologia non riconosciuta' -> 21 ora strutturati; resta Eib-99/29 Multi Coupon (strutturato).
 - app v0.9.3: lotti istituzionali (taglio minimo >= 100.000) nascosti di default, riattivabili con "Mostra lotti istituzionali"
   nei filtri avanzati; badge sul lotto. 919 titoli su 3.672 (749 EuroTLX, 170 MOT); in EUR coi filtri di default 120 su 922.
+- app v0.9.4 / app.css v0.2.1: filtri più leggibili: conteggio live nel pannello ("N titoli corrispondono"), pulsanti
+  "Azzera filtri" e "Mostra risultati", campi modificati evidenziati, chip dei filtri attivi (rimovibili con ×) sempre visibili
+  sotto "Filtri avanzati · N attivi".

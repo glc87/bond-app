@@ -55,7 +55,13 @@
         <label class="check"><input id="f-ask" type="checkbox"> Solo con prezzo ask reale</label>
         <label class="check"><input id="f-nominus" type="checkbox"> Escludi sopra la pari (minusvalenza)</label>
       </div>
+      <div class="filter-bar">
+        <span id="filter-live" class="hint">I filtri si applicano subito mentre li modifichi.</span>
+        <button type="button" class="chip" id="filter-reset">Azzera filtri</button>
+        <button type="button" class="chip on" id="filter-close">Mostra risultati</button>
+      </div>
     </details>
+    <div class="active-filters" id="active-filters"></div>
   </section>
 
   <section class="auctions" id="auctions"></section>
