@@ -1,5 +1,5 @@
 """
-yields.py — v0.2.2
+yields.py — v0.3.0
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -215,16 +215,25 @@ def tax_rate_for(tipologia: str, issuer: str, guarantor: str = "") -> tuple[floa
 # ----------------------------------------------------------------------------
 # Flussi di cassa
 # ----------------------------------------------------------------------------
-def coupon_schedule(maturity: date, freq: int, settle: date, accrual_start: Optional[date]) -> tuple[list[date], Optional[date]]:
-    """Ritorna (date cedola future > settle, in ordine) e la data cedola precedente (<= settle)."""
+def coupon_schedule(maturity: date, freq: int, settle: date, accrual_start: Optional[date],
+                    first_coupon: Optional[date] = None) -> tuple[list[date], Optional[date]]:
+    """Ritorna (date cedola future > settle, in ordine) e la data cedola precedente (<= settle).
+    Le date regolari si ricavano a ritroso dalla scadenza. Se è nota la data della PRIMA cedola
+    (scheda BI "Data Stacco prima Cedola"), le date regolari precedenti vengono scartate e il primo
+    periodo va dal godimento alla prima cedola (corto o lungo)."""
     if freq <= 0:
         return [], accrual_start
     step = 12 // freq
+    if first_coupon is not None and accrual_start is not None and first_coupon <= accrual_start:
+        first_coupon = None   # dato incoerente: ignoro
     dates = []
     d = maturity
     k = 0
     prev = None
     while True:
+        if first_coupon is not None and d < first_coupon:
+            prev = accrual_start if accrual_start is not None else d
+            break
         if d > settle:
             dates.append(d)
         else:
@@ -237,6 +246,9 @@ def coupon_schedule(maturity: date, freq: int, settle: date, accrual_start: Opti
             break
         if k > 2000:
             break
+    if first_coupon is not None and first_coupon > settle and first_coupon not in dates:
+        dates.append(first_coupon)       # prima cedola irregolare non allineata alle date regolari
+        dates = [x for x in dates if x >= first_coupon]
     dates.sort()
     return dates, prev
 
@@ -333,7 +345,8 @@ class YieldResult:
 
 def compute(price: float, price_source: str, trade_date: date, maturity: date,
             coupon_annual: float, freq: int, tax_rate: float, kind: str,
-            accrual_start: Optional[date], costs: CostParams, bi_taxes_discount: bool = True) -> YieldResult:
+            accrual_start: Optional[date], costs: CostParams, bi_taxes_discount: bool = True,
+            first_coupon: Optional[date] = None) -> YieldResult:
     """bi_taxes_discount: True per strip/BOT/Zc (BI tassa lo scarto nel suo netto), False per i "Tf 0%"
     (BI li tratta come titoli con cedola: netto = lordo). Influenza SOLO ytm_net_bi_convention."""
     settle = settlement_date(trade_date)
@@ -342,7 +355,7 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     if kind == "zero":
         coupon_annual, freq = 0.0, 0
 
-    future, prev = coupon_schedule(maturity, freq, settle, accrual_start)
+    future, prev = coupon_schedule(maturity, freq, settle, accrual_start, first_coupon)
     next_ = future[0] if future else None
     acc_g = accrued_interest(coupon_annual, freq, settle, prev, next_)
     acc_n = acc_g * (1 - tax_rate)

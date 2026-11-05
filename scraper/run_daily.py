@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.5.1
+run_daily.py — v0.5.2
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -28,7 +28,7 @@ from pathlib import Path
 import borsa_italiana as bi
 import yields as y
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -152,7 +152,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
             if ref and s.bi_yield_gross is not None:
                 ref_date = s.ref_date or trade_date
                 true_zc = y.is_true_zero_coupon(s.name, b.tipo_bond, s.tipologia)
-                r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc)
+                r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date)
                 if r_ref.ytm_gross is not None:
                     chk["ytm_gross_vs_bi"] = round(r_ref.ytm_gross * 100 - s.bi_yield_gross, 3)
                 if s.bi_accrued_gross is not None:
@@ -162,7 +162,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
                     # Deduzione dell'aliquota dal netto pubblicato da BI: confronto le due ipotesi (12,5% e 26%).
                     # Il segnale è utile solo se le due ipotesi distano abbastanza (titoli brevi a cedola bassa: no).
                     other = y.TAX_OTHER if tax == y.TAX_GOV else y.TAX_GOV
-                    r_oth = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs, true_zc)
+                    r_oth = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date)
                     if r_oth.ytm_net_bi_convention is not None:
                         mine = r_ref.ytm_net_bi_convention * 100
                         oth = r_oth.ytm_net_bi_convention * 100
@@ -183,7 +183,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
                                 anomalies.append(f"aliquota {tax:.3f} non confermata da BI (nessuna delle due combacia bene)")
                 if chk.get("ytm_gross_vs_bi") is not None and abs(chk["ytm_gross_vs_bi"]) > 0.05 and r_ref.years_to_maturity > 0.5:
                     anomalies.append(f"YTM lordo scostato da BI di {chk['ytm_gross_vs_bi']}")
-            r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs)
+            r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, True, s.first_coupon_date)
             rec["calc"] = y.result_to_dict(r)
             rec["check"] = chk
         except Exception as e:  # mai far cadere il run per un titolo

@@ -45,3 +45,4 @@
   Le altre misure (YTM lordo, netto solo tasse, semplice) restano solo nella scheda per confronto con altri siti.
 - 2026-11-05: run schedulato di ieri sera fallito (fetch_ecb_rates persa in un refactor): ripristinata; nuovo test_e2e.py
   (server finto, main() eseguita davvero) nel workflow prima dello scraping.
+- yields v0.3.0 / yields.js v0.3.0 / run_daily v0.5.2: prima cedola irregolare con 'Data stacco prima cedola' (verifica contro BI in corso sui dati del 05/11).

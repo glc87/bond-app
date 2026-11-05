@@ -1,4 +1,4 @@
-/* yields.js — v0.2.0
+/* yields.js — v0.3.0
    Porting fedele di scraper/yields.py (compute) in JavaScript, per ricalcolare i
    rendimenti all-in nel browser con i parametri scelti dall'utente.
    Deve dare gli stessi numeri di Python a parità di input: vedi tools/check_js_vs_py.mjs. */
@@ -32,15 +32,19 @@
   function parseISO(s) { if (!s) return null; const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); }
   function toISO(t) { return t == null ? null : new Date(t).toISOString().slice(0, 10); }
 
-  function couponSchedule(maturity, freq, settle, accrualStart) {
+  function couponSchedule(maturity, freq, settle, accrualStart, firstCoupon) {
+    // identica a yields.py coupon_schedule (prima cedola irregolare se nota)
     if (freq <= 0) return { future: [], prev: accrualStart };
-    const step = 12 / freq; const dates = []; let prev = null; let k = 0; let d = maturity;
+    const step = 12 / freq; let dates = []; let prev = null; let k = 0; let d = maturity;
+    if (firstCoupon != null && accrualStart != null && firstCoupon <= accrualStart) firstCoupon = null;
     for (;;) {
+      if (firstCoupon != null && d < firstCoupon) { prev = accrualStart != null ? accrualStart : d; break; }
       if (d > settle) dates.push(d); else { prev = d; break; }
       k++; d = addMonths(maturity, -step * k);
       if (accrualStart != null && d < accrualStart) { prev = accrualStart; break; }
       if (k > 2000) break;
     }
+    if (firstCoupon != null && firstCoupon > settle && !dates.includes(firstCoupon)) { dates.push(firstCoupon); dates = dates.filter(x => x >= firstCoupon); }
     dates.sort((a, b) => a - b);
     return { future: dates, prev };
   }
@@ -81,12 +85,13 @@
     const settle = settlementDate(p.tradeDate);
     const maturity = parseISO(bond.maturity);
     const accrualStart = parseISO(bond.accrual_start);
+    const firstCoupon = parseISO(bond.first_coupon_date);
     const years = (maturity - settle) / DAY / 365.0;
     const tax = bond.tax_rate;
     let couponAnnual = bond.coupon_annual || 0, freq = bond.coupon_frequency || 0;
     if (bond.kind === "zero") { couponAnnual = 0; freq = 0; }
     const price = p.price;
-    const { future, prev } = couponSchedule(maturity, freq, settle, accrualStart);
+    const { future, prev } = couponSchedule(maturity, freq, settle, accrualStart, firstCoupon);
     const next = future.length ? future[0] : null;
     const accG = accrued(couponAnnual, freq, settle, prev, next);
     const accN = accG * (1 - tax);
@@ -133,6 +138,6 @@
     };
   }
 
-  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.2.0" };
+  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.3.0" };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Yields = api;
 })(typeof window !== "undefined" ? window : globalThis);
