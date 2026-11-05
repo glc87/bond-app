@@ -1,5 +1,5 @@
 """
-test_offline.py — v0.1.2
+test_offline.py — v0.1.3
 Test offline su pagine campione reali (fixtures/ prelevate il 04/11/2026).
 Esegui:  python scraper/test_offline.py
 """
@@ -68,6 +68,13 @@ def test_classify():
     assert y.classify("Glencore Funding 3.875% Call 27ot27", "Obbligazioni Corporate", "", "", 3.875, 2).kind == "callable"
     assert y.classify("Eni Sdg Linked Tf 4,3% Fb28 Eur", "Obbligazioni Corporate", "", "", 4.3, 1).kind == "fixed"
     assert y.classify("Ebrd Zc Jun36 Call Zar", "Obbligazioni Sovranazionali", "", "", None, 1).kind == "callable"
+
+
+def test_supranational_abbreviations():
+    for issuer in ["BANCA EUROPEA PER LA RIC E LO SVIL", "EUROPEAN FINANC STABILITY FACILITY", "UE", "AIIB", "COUNCIL OF EUROPE SOCIAL DEVEL BANK"]:
+        rate, reason = y.tax_rate_for("Titoli di stato esteri", issuer)
+        assert rate == 0.125 and reason.startswith("sovranazionale"), (issuer, reason)
+    rate, reason = y.tax_rate_for("Titoli di stato esteri", "REPUBLIC OF ROMANIA"); assert reason.startswith("titolo di Stato")
 
 
 def test_zero_coupon_bi_convention():

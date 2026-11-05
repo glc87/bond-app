@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.3
+yields.py — v0.3.4
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -50,6 +50,9 @@ SUPRANATIONAL_KEYS = [
     "EUROPEAN BANK FOR RECONSTRUCTION", "EBRD", "BERS", "INTERNATIONAL FINANCE CORPORATION", "IFC",
     "ASIAN DEVELOPMENT BANK", "INTER-AMERICAN DEVELOPMENT BANK", "AFRICAN DEVELOPMENT BANK",
     "NORDIC INVESTMENT BANK", "EUROFIMA", "INTERNATIONAL DEVELOPMENT ASSOCIATION",
+    # forme abbreviate usate da Borsa Italiana (run 05/11/2026): EBRD, EFSF, UE, AIIB, CEB
+    "BANCA EUROPEA PER LA RIC", "EUROPEAN FINANC STABILITY", "UE", "AIIB", "ASIAN INFRASTRUCTURE INVESTMENT BANK",
+    "COUNCIL OF EUROPE SOCIAL DEVEL", "COUNCIL OF EUROPE",
 ]
 GOV_TIPOLOGIE = {"titoli di stato italiani", "titoli di stato esteri"}
 

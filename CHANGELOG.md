@@ -73,3 +73,8 @@
 - app v0.9.4 / app.css v0.2.1: filtri più leggibili: conteggio live nel pannello ("N titoli corrispondono"), pulsanti
   "Azzera filtri" e "Mostra risultati", campi modificati evidenziati, chip dei filtri attivi (rimovibili con ×) sempre visibili
   sotto "Filtri avanzati · N attivi".
+- app v0.9.5 / app.css v0.2.2: rendimento totale a scadenza (guadagno netto / esborso, non annualizzato) in piccolo sotto il
+  netto annuo in lista ("+3,60% in 7 mesi") e nella scheda accanto al guadagno in valuta. Colonne desktop riallineate.
+- yields v0.3.4: nomi abbreviati di Borsa Italiana per i sovranazionali (EBRD "Banca Europea per la Ric e lo Svil",
+  EFSF "European Financ Stability", UE, AIIB, CEB "Council of Europe Social Devel"): ora categoria "Sovranazionale"
+  invece di "Stato estero" (172 titoli; aliquota invariata 12,5%). Effetto sui dati dal prossimo run.

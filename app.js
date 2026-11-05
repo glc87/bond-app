@@ -1,11 +1,11 @@
-/* app.js — v0.9.4 — Bond Netto (PWA) */
+/* app.js — v0.9.5 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.9.4";
+  const APP_VERSION = "0.9.5";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
-  const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+  const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
   const fmtNum = (v, d = 2) => v == null ? "–" : v.toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d });
   const fmtEur = v => v == null ? "–" : v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   const fmtCur = (v, cur) => { if (v == null) return "–"; try { return v.toLocaleString("it-IT", { style: "currency", currency: cur || "EUR", maximumFractionDigits: 0 }); } catch { return `${fmtNum(v, 0)} ${cur}`; } };
@@ -41,6 +41,10 @@
     return "other";
   }
   const CAT_LABEL = { gov_it: "Stato Italia", gov_fx: "Stato estero", supra: "Sovranazionale", other: "Corporate/altro" };
+  // Rendimento totale a scadenza: guadagno netto complessivo / esborso, non annualizzato (cedole non reinvestite).
+  // Sotto l'anno è il numero che conta: il 6% "annuo" di uno ZC a 7 mesi è +3,6% effettivi.
+  const holdLabel = y => y == null ? "" : y < 1 ? `${Math.max(1, Math.round(y * 12))} mesi` : `${fmtNum(y, 1)} anni`;
+  const totalReturn = c => (c && c.cost_total_eur > 0 && c.net_gain_total_eur != null) ? `${c.net_gain_total_eur >= 0 ? "+" : ""}${fmtPct(c.net_gain_total_eur / c.cost_total_eur, Math.abs(c.net_gain_total_eur / c.cost_total_eur) >= 0.1 ? 1 : 2)} in ${holdLabel(c.years_to_maturity)}` : "";
   const INST_LOT = 100000;   // taglio minimo da cui il titolo è considerato "istituzionale" (919 titoli su 3.672 il 05/11/2026, per lo più EuroTLX)
   const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up", callable: "callable", structured: "strutturato", amortizing: "ammortamento", unknown: "altro" };
   const FREQ_LABEL = { 1: "annuale", 2: "semestrale", 4: "trimestrale", 12: "mensile" };
@@ -118,8 +122,8 @@
     if (country) add("f-country", "Paese", country, () => { $("#f-country").value = ""; });
     if (market) add("f-market", "Mercato", market === "ETLX" ? "EuroTLX" : market, () => { $("#f-market").value = ""; });
     if (kind !== "computable") add("f-kind", "Tipo", kindLabel[kind] || kind, () => { $("#f-kind").value = "computable"; });
-    if (!isNaN(ymin) && ymin !== 1) add("f-ymin", "Scadenza min", `${fmtNum(ymin)} anni`, () => { $("#f-ymin").value = "1"; });
-    if (!isNaN(ymax)) add("f-ymax", "Scadenza max", `${fmtNum(ymax)} anni`, () => { $("#f-ymax").value = ""; });
+    if (!isNaN(ymin) && ymin !== 1) add("f-ymin", "Scadenza min", `${fmtNum(ymin, 1)} anni`, () => { $("#f-ymin").value = "1"; });
+    if (!isNaN(ymax)) add("f-ymax", "Scadenza max", `${fmtNum(ymax, 1)} anni`, () => { $("#f-ymax").value = ""; });
     if (!isNaN(nmin)) add("f-nmin", "Netto min", `${fmtNum(nmin)}%`, () => { $("#f-nmin").value = ""; });
     if (!isNaN(cmin)) add("f-cmin", "Cedola netta min", `${fmtNum(cmin)}%`, () => { $("#f-cmin").value = ""; });
     if (!isNaN(lot)) add("f-lot", "Lotto max", fmtNum(lot, 0), () => { $("#f-lot").value = ""; });
@@ -201,7 +205,7 @@
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
-      <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto annuo</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
+      <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto annuo</div><div class="small tot" title="guadagno netto totale (tasse, commissioni, bollo) sull'esborso, da oggi alla scadenza, senza reinvestire le cedole">${totalReturn(c)}</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
       <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>${c.spread_bund != null ? `<div><span class="lbl">vs Bund</span>${c.spread_bund >= 0 ? "+" : ""}${fmtPct(c.spread_bund)}</div>` : ""}` : ""}</div>
     </div>`;
   }
@@ -345,7 +349,7 @@
       <div class="kpi"><div class="l">Rendimento netto annuo (tasse, commissioni, bollo)</div><div class="v good">${fmtPct(c.ytm_net_all)}</div></div>
       <div class="kpi"><div class="l">di cui da cedola (flusso netto / prezzo)</div><div class="v">${fmtPct(b._price ? (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - taxOf(b)) / b._price : null)}</div></div>
       <div class="kpi"><div class="l">di cui da prezzo (a scadenza)</div><div class="v">${fmtPct(c.ytm_net_all != null && b._price ? c.ytm_net_all - (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - taxOf(b)) / b._price : null)}</div></div>
-      <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)}</div></div>
+      <div class="kpi"><div class="l">Guadagno netto totale a scadenza (${holdLabel(c.years_to_maturity)})</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)} <span class="small">= ${totalReturn(c)} (non annualizzato)</span></div></div>
 
     </div>${minus}${src}${exc}
     ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
