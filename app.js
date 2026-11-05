@@ -1,8 +1,8 @@
-/* app.js — v0.9.2 — Bond Netto (PWA) */
+/* app.js — v0.9.3 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.9.2";
+  const APP_VERSION = "0.9.3";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -41,6 +41,7 @@
     return "other";
   }
   const CAT_LABEL = { gov_it: "Stato Italia", gov_fx: "Stato estero", supra: "Sovranazionale", other: "Corporate/altro" };
+  const INST_LOT = 100000;   // taglio minimo da cui il titolo è considerato "istituzionale" (919 titoli su 3.672 il 05/11/2026, per lo più EuroTLX)
   const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up", callable: "callable", structured: "strutturato", amortizing: "ammortamento", unknown: "altro" };
   const FREQ_LABEL = { 1: "annuale", 2: "semestrale", 4: "trimestrale", 12: "mensile" };
 
@@ -86,7 +87,7 @@
     const q = $("#q").value.trim().toLowerCase();
     const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value, market = $("#f-market").value;
     const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value), cmin = parseFloat($("#f-cmin").value);
-    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked;
+    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked, showInst = $("#f-inst").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
       if (state.cat !== "all" && b._cat !== state.cat) return false;
@@ -104,11 +105,12 @@
       if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
       if (!showUncertain && b._uncertain) return false;
+      if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
       if (!showStrips && b._strip) return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur && cur !== "EUR" ? cur : "", country, market, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur && cur !== "EUR" ? cur : "", country, market, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", showInst ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -171,7 +173,7 @@
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
       <div class="c-name"><div class="name">${esc(b.name)} ${minus}</div>
-        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
+        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span class="${b.min_lot >= INST_LOT ? "badge warn" : ""}" title="${b.min_lot >= INST_LOT ? "taglio istituzionale" : "lotto minimo"}">lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
@@ -475,7 +477,7 @@
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

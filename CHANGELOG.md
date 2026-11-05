@@ -68,3 +68,5 @@
     (coincidono con BI entro 0,03). Nuovo check 'bi_vs_prev_ref' e riepilogo meta.bi_check per mercato: dal run di domani
     si verifica l'ipotesi del riferimento di ieri (history ora salva rif, YTM su rif e YTM BI).
   * 22 'tipologia non riconosciuta' -> 21 ora strutturati; resta Eib-99/29 Multi Coupon (strutturato).
+- app v0.9.3: lotti istituzionali (taglio minimo >= 100.000) nascosti di default, riattivabili con "Mostra lotti istituzionali"
+  nei filtri avanzati; badge sul lotto. 919 titoli su 3.672 (749 EuroTLX, 170 MOT); in EUR coi filtri di default 120 su 922.
