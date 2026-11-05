@@ -46,3 +46,7 @@
 - 2026-11-05: run schedulato di ieri sera fallito (fetch_ecb_rates persa in un refactor): ripristinata; nuovo test_e2e.py
   (server finto, main() eseguita davvero) nel workflow prima dello scraping.
 - yields v0.3.0 / yields.js v0.3.0 / run_daily v0.5.2: prima cedola irregolare con 'Data stacco prima cedola' (verifica contro BI in corso sui dati del 05/11).
+- 2026-11-05 run 14:41 (2 worker): 1821 titoli in 34', 1487 calcolabili, 0 falliti. Verifica YTM lordo vs BI (>6 mesi):
+  1306/1387 entro 0,01; EUR 98,9% entro 0,02. "Data stacco prima cedola" di BI coincide sempre col godimento (campo inutile):
+  la gestione prima cedola irregolare resta nel codice ma è inattiva. Dove il rateo BI differisce (Bund 3,4% 2047, Romania USD,
+  Svezia) lo YTM coincide entro 0,005: il campo rateo BI su quei titoli usa una convenzione diversa; non si insegue oltre.
