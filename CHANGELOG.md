@@ -78,3 +78,5 @@
 - yields v0.3.4: nomi abbreviati di Borsa Italiana per i sovranazionali (EBRD "Banca Europea per la Ric e lo Svil",
   EFSF "European Financ Stability", UE, AIIB, CEB "Council of Europe Social Devel"): ora categoria "Sovranazionale"
   invece di "Stato estero" (172 titoli; aliquota invariata 12,5%). Effetto sui dati dal prossimo run.
+- app v0.9.6 / app.css v0.2.3: pulsanti del pannello filtri distinti dai chip: "Mostra risultati ↓" pieno blu a tutta
+  larghezza, "↺ Azzera filtri" grigio con bordo; chip dei filtri attivi a bordo tratteggiato su fondo azzurro chiaro.
