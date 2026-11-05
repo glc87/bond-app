@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.1
+yields.py — v0.3.2
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -144,7 +144,10 @@ def classify(name: str, tipologia: str, structure: str, tipo_bond: str,
     if any(k in n for k in [" valore", " futura", " più", " piu ", " step", " sc ", " oc ", " su "]) or "step" in st or "step" in tb:
         return BondClass("stepup", False, "cedola step-up/strutturata: calcolo non supportato in questa fase")
     if " call" in n or "callable" in st or "callable" in tb:
-        return BondClass("callable", False, "titolo richiamabile (call): rendimento a scadenza non garantito")
+        # Richiamabile: il rendimento a scadenza si calcola (è il caso base), ma l'emittente può rimborsare prima.
+        # Nei corporate la call è quasi la norma (spesso solo nei 3 mesi prima della scadenza): escluderli
+        # toglierebbe metà di EuroTLX (39 su 60 nel test del 05/11/2026). computable=True con avviso.
+        return BondClass("callable", True, "richiamabile (call): rendimento calcolato a scadenza, l'emittente può rimborsare prima")
     if " zc " in n or "zero" in tb or "zero" in st or " strip" in n or tipologia.lower().startswith("bot") or " bot " in n or " bot-" in n:
         return BondClass("zero", True, "")
     if coupon_annual == 0 or " tf 0% " in n or " fx 0% " in n:

@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.0
+run_daily.py — v0.7.1
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -121,6 +121,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
         "kind": cls.kind,
         "computable": cls.computable and price is not None and maturity is not None,
         "not_computable_reason": cls.reason if not cls.computable else ("prezzo o scadenza mancanti" if (price is None or maturity is None) else ""),
+        "warning": cls.reason if cls.computable and cls.reason else "",
         "currency": s.currency_trade or "",
         "min_lot": s.min_lot,
         "outstanding": s.outstanding,

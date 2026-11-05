@@ -1,8 +1,8 @@
-/* app.js — v0.9.0 — Bond Netto (PWA) */
+/* app.js — v0.9.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.9.0";
+  const APP_VERSION = "0.9.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -95,6 +95,7 @@
       if (market && !(b.markets || [b.market]).includes(market)) return false;
       if (country && b.country !== country) return false;
       if (kind === "computable" && !b._calc) return false;
+      if (kind === "nocall" && !(b._calc && b.kind !== "callable")) return false;
       if ((kind === "fixed" || kind === "zero") && !(b._calc && b.kind === kind)) return false;
       if (!isNaN(ymin) && b._years != null && b._years < ymin) return false;
       if (!isNaN(ymax) && b._years != null && b._years > ymax) return false;
@@ -165,7 +166,7 @@
   function cardHTML(b) {
     const c = b._calc;
     const cpn = b.kind === "zero" ? "zero coupon" : (b.coupon_annual != null ? `${fmtNum(b.coupon_annual)}% ${FREQ_LABEL[b.coupon_frequency] || ""}` : KIND_LABEL[b.kind]);
-    const minus = (b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "") + (b._liq != null && b._liq < 0.5 ? ` <span class="badge warn" title="venditore presente in ${Math.round(b._liq * 100)}% delle ultime ${b.liquidity.days} rilevazioni">poco liquido</span>` : "") + (b._uncertain ? ' <span class="badge stale" title="' + esc(b._uncertain) + '">incerto</span>' : "") + (b._strip ? ' <span class="badge cur">strip</span>' : "");
+    const minus = (b._price > 100 ? '<span class="badge warn">sopra 100</span>' : "") + (b.kind === "callable" ? ' <span class="badge warn" title="' + esc(b.warning || "richiamabile") + '">call</span>' : "") + (b._liq != null && b._liq < 0.5 ? ` <span class="badge warn" title="venditore presente in ${Math.round(b._liq * 100)}% delle ultime ${b.liquidity.days} rilevazioni">poco liquido</span>` : "") + (b._uncertain ? ' <span class="badge stale" title="' + esc(b._uncertain) + '">incerto</span>' : "") + (b._strip ? ' <span class="badge cur">strip</span>' : "");
     const sel = state.compare.has(b.isin);
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
@@ -295,7 +296,8 @@
       <tr><td>Rateo lordo BI</td><td>${fmtNum(bi.accrued_gross, 5)}</td></tr>
       <tr><td>Duration modificata</td><td>${fmtNum(bi.mod_duration)}</td></tr>
       <tr><td>Aliquota confermata dai dati BI</td><td class="${ck.tax_rate_confirmed === false ? "ko" : "ok"}">${ck.tax_rate_confirmed === false ? "NO, verificare" : ck.tax_rate_confirmed ? "sì" : "–"}</td></tr></table>` : "";
-    const anomalies = (b._uncertain ? `<div class="note">⚠ <b>Titolo incerto</b>: ${esc(b._uncertain)}. Nascosto di default dalla lista.</div>` : "")
+    const warn = b.warning ? `<div class="note">⚠ ${esc(b.warning)}. Se viene richiamato a 100 prima della scadenza, il rendimento effettivo cambia: più basso se comprato sopra 100, più alto se sotto.</div>` : "";
+    const anomalies = warn + (b._uncertain ? `<div class="note">⚠ <b>Titolo incerto</b>: ${esc(b._uncertain)}. Nascosto di default dalla lista.</div>` : "")
       + (b._strip ? `<div class="note">ℹ <b>Strip</b>: cedola o mantello di un titolo di Stato "smontato", negoziato come zero coupon. Legittimo ma poco liquido, spread larghi, pochi scambi: nascosto di default.</div>` : "")
       + ((b.anomalies || []).length ? `<div class="note">Note tecniche: ${b.anomalies.map(esc).join("<br>")}</div>` : "");
     const calc = b._calc ? `<div class="amount"><label>Importo nominale</label><input id="d-amount" type="number" step="${b.min_lot || 1000}" min="${b.min_lot || 1000}" value="${nominal}"> €</div>

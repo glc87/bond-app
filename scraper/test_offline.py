@@ -53,7 +53,7 @@ def test_classify():
     assert y.classify("Btpstripital Zc May27 Eur", "Titoli di stato italiani", "", "Zero Coupon", None, 0).kind == "zero"
     assert y.classify("Btp Italia Gn32 Eur", "Titoli di stato italiani", "", "", 1.85, 2).kind == "inflation"
     assert y.classify("Cct-Eu Tv Ot28 Eur", "Titoli di stato italiani", "", "", None, 2).kind == "floating"
-    assert y.classify("Kme Group Tf 5% St27 Call Eur", "Obbligazioni", "", "", 5.0, 2).kind == "callable"
+    c = y.classify("Kme Group Tf 5% St27 Call Eur", "Obbligazioni", "", "", 5.0, 2); assert c.kind == "callable" and c.computable and c.reason
     assert y.classify("Btp Valore Gn27 Eur", "Titoli di stato italiani", "", "", 4.0, 4).kind == "stepup"
     assert y.classify("Austria Tf 2,4% Mg34 Eur", "Titoli di stato esteri", "Plain Vanilla", "", 2.4, 1).computable
 

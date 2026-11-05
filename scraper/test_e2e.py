@@ -54,7 +54,7 @@ def main():
     assert m["by_market"] == {"MOT": 2, "ETLX": 2}, m["by_market"]
     tl = {x["isin"]: x for x in d["bonds"]}
     assert tl["US912803GY33"]["kind"] == "zero" and tl["US912803GY33"]["computable"] and tl["US912803GY33"]["price"]["source"] == "ask"
-    assert tl["AT0000A37249"]["kind"] == "callable" and tl["AT0000A37249"]["coupon_frequency"] == 1
+    assert tl["AT0000A37249"]["kind"] == "callable" and tl["AT0000A37249"]["computable"] and tl["AT0000A37249"]["warning"] and tl["AT0000A37249"]["coupon_frequency"] == 1
     assert m["fx"]["rates"]["USD"] == 1.1523 and m["fx"]["date"] == "2026-11-04"
     assert "price_quality" in m and m["requests"] >= 1 + 1 + 2 * 2 + len(rd.tlx.CATEGORIES) + 2 * 2
     b = {x["isin"]: x for x in d["bonds"]}
