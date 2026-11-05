@@ -64,6 +64,7 @@
         <option value="ytm_net_all:desc">Rendimento netto ↓</option>
         <option value="coupon_net_yield:desc">Cedola netta (flusso annuo) ↓</option>
         <option value="price_yield:desc">Guadagno da prezzo ↓</option>
+        <option value="spread_bund:desc">Spread vs Bund ↓</option>
         <option value="years:asc">Scadenza ↑</option>
         <option value="years:desc">Scadenza ↓</option>
         <option value="price:asc">Prezzo ↑</option>
@@ -168,6 +169,7 @@
       <ul class="hint">
         <li><b>Rendimento netto annuo</b> (il numero grande): tasso annuo composto che eguaglia l'esborso (prezzo + rateo netto + commissioni) ai flussi netti (cedole tassate, rimborso al netto della tassa sulla plusvalenza, bollo). Confronta correttamente titoli con scadenze diverse.</li>
         <li><b>Di cui da cedola / da prezzo</b>: la parte del rendimento che incassi ogni anno con le cedole nette (cedola netta ÷ prezzo) e la parte che arriva solo a scadenza dal rimborso a 100. Stesso rendimento, due esperienze diverse: flusso in tasca oppure guadagno rinviato (e tassa rinviata).</li>
+        <li><b>vs Bund</b>: differenza di rendimento lordo rispetto a un titolo di Stato tedesco della stessa scadenza (curva ricavata dai Bund quotati sul MOT). È il "premio" che il mercato chiede per il rischio dell'emittente; per i titoli in valuta include anche il rischio cambio.</li>
         <li>Nella scheda trovi anche YTM lordo, YTM netto solo tasse e netto semplice, utili per confrontare con altri siti.</li>
         <li><b>YTM lordo</b>: come pubblicato da Borsa Italiana.</li>
         <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione (è quello che pagheresti); <span class="badge ref">rif</span> = prezzo di riferimento dell'ultima seduta (nessuna proposta in vendita); <span class="badge stale">fermo</span> = riferimento di un titolo mai scambiato nell'anno: prezzo vecchio, rendimento non realistico. I titoli "fermi" e gli "incerti" (prezzo non aggiornato o verifica con Borsa Italiana non superata) e gli strip sono nascosti di default: si riattivano nei filtri avanzati.</li>

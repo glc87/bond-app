@@ -1,8 +1,8 @@
-/* app.js — v0.6.2 — Bond Netto (PWA) */
+/* app.js — v0.7.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.6.2";
+  const APP_VERSION = "0.7.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -42,6 +42,21 @@
   const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up/strutturato", callable: "callable", unknown: "altro" };
   const FREQ_LABEL = { 1: "annuale", 2: "semestrale", 4: "trimestrale", 12: "mensile" };
 
+  // Curva Bund: titoli di Stato tedeschi a tasso fisso in EUR con prezzo affidabile -> (anni, YTM lordo), interpolazione lineare
+  function buildBundCurve() {
+    const pts = state.bonds.filter(b => b.country === "DE" && b._cat === "gov_fx" && b.kind === "fixed" && b.currency === "EUR" && b._calc && reliable(b) && !b._strip && b._years > 0.25)
+      .map(b => [b._years, b._calc.ytm_gross]).sort((a, b) => a[0] - b[0]);
+    // media per scadenze vicine (evita zig-zag da singoli titoli)
+    const out = []; for (const [x, y] of pts) { const last = out[out.length - 1]; if (last && Math.abs(last[0] - x) < 0.25) { last[0] = (last[0] * last[2] + x) / (last[2] + 1); last[1] = (last[1] * last[2] + y) / (last[2] + 1); last[2]++; } else out.push([x, y, 1]); }
+    return out;
+  }
+  function curveAt(curve, x) {
+    if (curve.length < 2 || x < curve[0][0] - 0.5 || x > curve[curve.length - 1][0] + 2) return null;
+    if (x <= curve[0][0]) return curve[0][1]; if (x >= curve[curve.length - 1][0]) return curve[curve.length - 1][1];
+    for (let i = 1; i < curve.length; i++) if (x <= curve[i][0]) { const [x0, y0] = curve[i - 1], [x1, y1] = curve[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
+    return null;
+  }
+
   function recompute() {
     const trade = Yields.parseISO(state.meta.trade_date);
     for (const b of state.bonds) {
@@ -56,6 +71,11 @@
       }
       b._uncertain = uncertainReason(b);
       b._strip = isStrip(b);
+    }
+    state.bundCurve = buildBundCurve();
+    for (const b of state.bonds) {
+      const ref = b._calc ? curveAt(state.bundCurve, b._years) : null;
+      if (b._calc) b._calc.spread_bund = ref != null ? b._calc.ytm_gross - ref : null;
     }
   }
 
@@ -99,7 +119,7 @@
         case "price": return b._price;
         case "coupon": return b.coupon_annual;
         case "name": return b.name;
-        case "coupon_net_yield": case "price_yield": case "ytm_net_all": return b._calc ? b._calc[key] : null;
+        case "coupon_net_yield": case "price_yield": case "ytm_net_all": case "spread_bund": return b._calc ? b._calc[key] : null;
         default: return b._calc ? b._calc[key] : null;
       }
     };
@@ -150,7 +170,7 @@
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
       <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto annuo</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
-      <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>` : ""}</div>
+      <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>${c.spread_bund != null ? `<div><span class="lbl">vs Bund</span>${c.spread_bund >= 0 ? "+" : ""}${fmtPct(c.spread_bund)}</div>` : ""}` : ""}</div>
     </div>`;
   }
 
@@ -289,6 +309,7 @@
       <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>
     <h3>Altre misure (per confronto con altri siti)</h3><table class="kv">
       <tr><td>YTM lordo (come Borsa Italiana)</td><td>${fmtPct(c.ytm_gross)}</td></tr>
+      <tr><td>Spread vs Bund di pari scadenza (lordo)${b.currency !== "EUR" ? " — in valuta, include il rischio cambio" : ""}</td><td>${b._calc && b._calc.spread_bund != null ? (b._calc.spread_bund >= 0 ? "+" : "") + fmtPct(b._calc.spread_bund) : "–"}</td></tr>
       <tr><td>YTM netto solo tasse (senza commissioni e bollo; tassa anche la plusvalenza, a differenza di BI)</td><td>${fmtPct(c.ytm_net_tax)}</td></tr>
       <tr><td>Netto annuo semplice (guadagno totale ÷ costo ÷ anni, senza reinvestimento)</td><td>${fmtPct(c.simple_net_all)}</td></tr></table>`;
   }
