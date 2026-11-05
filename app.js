@@ -1,8 +1,8 @@
-/* app.js — v0.8.1 — Bond Netto (PWA) */
+/* app.js — v0.8.2 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.8.1";
+  const APP_VERSION = "0.8.2";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -306,6 +306,7 @@
   function calcHTML(b, nominal) {
     const c = Yields.compute(b, { price: b._price, priceSource: b.price.source, tradeDate: Yields.parseISO(state.meta.trade_date), ...params(nominal) });
     const minus = c.minus_eur > 0 ? `<div class="note">Prezzo sopra 100: a scadenza si genera una minusvalenza di ${fmtCur(c.minus_eur, b.currency)} (credito fiscale compensabile con altre plusvalenze da "redditi diversi" entro i 4 anni successivi). Non è conteggiata nel rendimento.</div>` : "";
+    const exc = (b.currency === "SEK" || b.currency === "DKK") && c.next_coupon_date ? `<div class="note">Mercati svedese e danese: esiste un periodo <b>ex-cedola</b> prima dello stacco (durata fissata dal depositario locale, non pubblicata dall'emittente). Comprando nei giorni immediatamente precedenti la cedola del ${fmtDate(c.next_coupon_date)}, la cedola resterebbe al venditore e il rateo non sarebbe dovuto: l'esborso reale sarebbe più basso di quello indicato. Verifica con la banca prima dell'ordine.</div>` : "";
     const q = quality(b);
     const src = q === "stale" ? `<div class="note">⚠ <b>Prezzo fermo</b>: nessuna proposta in vendita e nessuno scambio nell'anno. Il prezzo di riferimento (${fmtNum(b.price.ref)}) è vecchio e il rendimento calcolato non è realistico: nessuno vende a questo prezzo.</div>`
       : q === "quiet" ? `<div class="note">Nessuna proposta in vendita nel book e nessuno scambio oggi: calcolo sul prezzo di riferimento, che potrebbe non essere aggiornato.</div>`
@@ -316,7 +317,7 @@
       <div class="kpi"><div class="l">di cui da prezzo (a scadenza)</div><div class="v">${fmtPct(c.ytm_net_all != null && b._price ? c.ytm_net_all - (b.kind === "zero" ? 0 : (b.coupon_annual || 0)) * (1 - taxOf(b)) / b._price : null)}</div></div>
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)}</div></div>
 
-    </div>${minus}${src}
+    </div>${minus}${src}${exc}
     ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
     <h3>Flussi per ${nominal.toLocaleString("it-IT")} ${esc(b.currency)} nominali</h3><table class="kv">
       <tr><td>Regolamento (T+2)</td><td>${fmtDate(c.settle_date)}</td></tr>
