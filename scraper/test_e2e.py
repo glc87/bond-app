@@ -24,9 +24,13 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         p = self.path
         if "eurofxref" in p: body = ECB_XML
+        elif "/eurotlx/ricerca-avanzata/risultati.html" in p and "category=T-BONDS" in p and "page=2" not in p: body = (FX / "tlx_lista.html").read_text(encoding="utf-8")
+        elif "/eurotlx/ricerca-avanzata/risultati.html" in p: body = "<html><body><table></table></body></html>"
+        elif "/eurotlx/scheda/" in p: isin = p.split("/scheda/")[1][:12]; body = (FX / f"tlx_scheda_{isin}.html").read_text(encoding="utf-8")
+        elif "/eurotlx/dati-completi" in p: isin = p.split("isin=")[1][:12]; body = (FX / f"tlx_dati_{isin}.html").read_text(encoding="utf-8")
         elif "/lista.html" in p and ("page=1" in p or "page=" not in p) and "/btp/" in p: body = (FX / "lista_euro_p3.html").read_text(encoding="utf-8")
         elif "/lista.html" in p: body = "<html><body><table></table></body></html>"   # altre pagine/segmenti vuoti
-        elif "/scheda/" in p: body = (FX / "scheda_IT0005377152.html").read_text(encoding="utf-8")
+        elif "/scheda/" in p: isin = p.split("/scheda/")[1][:12]; body = (FX / "scheda_IT0005377152.html").read_text(encoding="utf-8").replace("IT0005377152", isin)
         elif "dati-completi" in p: body = (FX / "dati_AT0000A10683.html").read_text(encoding="utf-8")
         else: self.send_response(404); self.end_headers(); return
         self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.end_headers(); self.wfile.write(body.encode("utf-8"))
@@ -41,17 +45,21 @@ def main():
     bi.Client.__init__.__defaults__ = (0.0, 30, 3)        # nessuna pausa
     out = Path(tempfile.mkdtemp())
     rd.ROOT = out  # alerts.json cercato qui
-    (out / "alerts.json").write_text(json.dumps([{"metric": "price", "op": "<=", "value": 200, "isin": "IT0005377152"}]), encoding="utf-8")
+    (out / "alerts.json").write_text(json.dumps([{"metric": "price", "op": "<=", "value": 200, "isin": "IT0001174611"}]), encoding="utf-8")
     rc = rd.main(["--out", str(out), "--delay", "0", "--workers", "2", "--force"])
     assert rc == 0
     d = json.loads((out / "bonds.json").read_text(encoding="utf-8"))
     m = d["meta"]
-    assert m["n_total"] == 2 and m["n_failed"] == 0, m
+    assert m["n_total"] == 4 and m["n_failed"] == 0, m          # 2 MOT + 2 EuroTLX
+    assert m["by_market"] == {"MOT": 2, "ETLX": 2}, m["by_market"]
+    tl = {x["isin"]: x for x in d["bonds"]}
+    assert tl["US912803GY33"]["kind"] == "zero" and tl["US912803GY33"]["computable"] and tl["US912803GY33"]["price"]["source"] == "ask"
+    assert tl["AT0000A37249"]["kind"] == "callable" and tl["AT0000A37249"]["coupon_frequency"] == 1
     assert m["fx"]["rates"]["USD"] == 1.1523 and m["fx"]["date"] == "2026-11-04"
-    assert "price_quality" in m and m["requests"] >= 1 + 1 + 2 * 2
+    assert "price_quality" in m and m["requests"] >= 1 + 1 + 2 * 2 + len(rd.tlx.CATEGORIES) + 2 * 2
     b = {x["isin"]: x for x in d["bonds"]}
     assert "IT0005377152" in b or "BE0000291972" in b
-    rec = d["bonds"][0]
+    rec = next(x for x in d["bonds"] if x["market"] == "MOT")
     assert rec["computable"] and rec["calc"]["ytm_gross"] is not None and rec["price"]["quality"] == "ask"
     assert "first_coupon_date" in rec
     assert rec["liquidity"]["days"] == 1 and rec["liquidity"]["ask_days"] == 1 and rec["liquidity"]["score"] == 1.0

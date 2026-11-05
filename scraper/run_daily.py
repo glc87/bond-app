@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.6.0
+run_daily.py — v0.7.0
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -15,6 +15,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import sys
@@ -26,13 +27,18 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import borsa_italiana as bi
+import eurotlx as tlx
 import yields as y
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
 log = logging.getLogger("run_daily")
+
+
+def _tlx_fetch(tlx_row: dict, client: "bi.Client", _row) -> tuple:
+    return tlx.fetch_bond(client, tlx_row)
 
 
 def country_from_isin(isin: str) -> str:
@@ -66,6 +72,8 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
 
     tax, tax_why = y.tax_rate_for(s.tipologia, s.issuer, s.guarantor)
     cls = y.classify(s.name, s.tipologia, s.structure, b.tipo_bond, cpn, freq)
+    if "tel quel" in (s.trading_mode or "").lower() and cls.kind == "fixed" and (cpn or 0) > 0:
+        cls = y.BondClass("fixed", False, "quotato tel quel (prezzo comprensivo di rateo): calcolo non supportato")
 
     # --- scadenza: BI scrive l'anno a 2 cifre ("Mz72" = 2072, "30/06/20" = 2120). Un titolo quotato
     #     scade per forza nel futuro: se la data letta è passata, è il secolo sbagliato (+100 anni).
@@ -106,6 +114,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
         "issuer": s.issuer or row.issuer_hint,
         "country": country_from_isin(s.isin or row.isin),
         "segment": row.segment,
+        "market": s.market or "MOT",
         "tipologia": s.tipologia,
         "structure": s.structure,
         "tipo_bond": b.tipo_bond,
@@ -266,10 +275,10 @@ def liquidity_from_history(out: Path, trade_date: date, records: list, days: int
 
 
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()
-    t = (rec.get("tipologia") or "").lower()
-    if t == "titoli di stato italiani": return "gov_it"
-    if t == "titoli di stato esteri": return "gov_fx"
-    if "sovranazionale" in (rec.get("tax_reason") or ""): return "supra"
+    t = (rec.get("tipologia") or "").lower(); r = rec.get("tax_reason") or ""
+    if t == "titoli di stato italiani" or (r.startswith("titolo di Stato") and rec.get("country") == "IT"): return "gov_it"
+    if t == "titoli di stato esteri" or r.startswith("titolo di Stato") or r.startswith("classificato titolo di Stato"): return "gov_fx"
+    if "sovranazionale" in r: return "supra"
     return "other"
 
 
@@ -328,6 +337,7 @@ def alerts_report(fired: list, trade_date: date) -> str:
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--segments", nargs="*", default=None, choices=list(bi.SEGMENTS))
+    ap.add_argument("--sources", nargs="*", default=["mot", "tlx"], choices=["mot", "tlx"], help="mercati: mot (MOT) e/o tlx (EuroTLX)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--delay", type=float, default=1.0)
     ap.add_argument("--out", default=str(DATA))
@@ -349,20 +359,27 @@ def main(argv=None):
     fx = fetch_ecb_rates(client)
     log.info("Cambi BCE del %s: %d valute", fx.get("date"), len(fx["rates"]))
 
-    rows = bi.fetch_all_lists(client, args.segments)
-    log.info("Liste: %d titoli unici", len(rows))
+    jobs = []   # (ListRow, fetch_fn)
+    if "mot" in args.sources:
+        rows = bi.fetch_all_lists(client, args.segments)
+        log.info("Liste MOT: %d titoli unici", len(rows))
+        jobs += [(r, bi.fetch_bond) for r in rows]
+    if "tlx" in args.sources and not args.segments:
+        trows = tlx.fetch_all_lists(client)
+        log.info("Liste EuroTLX: %d titoli unici", len(trows))
+        jobs += [(tlx.as_list_row(r), functools.partial(_tlx_fetch, r)) for r in trows]
     if args.limit:
-        rows = rows[: args.limit]
+        jobs = jobs[: args.limit]
 
     records, failed = [], []
     done = 0
 
-    def work(row):
-        s, b = bi.fetch_bond(client, row)
+    def work(row, fetch_fn):
+        s, b = fetch_fn(client, row)
         return build_record(row, s, b, trade_date, costs)
 
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
-        for row, fut in [(row, ex.submit(work, row)) for row in rows]:
+        for row, fut in [(row, ex.submit(work, row, fn)) for row, fn in jobs]:
             try:
                 records.append(fut.result())
             except Exception as e:
@@ -370,8 +387,23 @@ def main(argv=None):
                 log.warning("Fallito %s: %s", row.isin, e)
             done += 1
             if done % 50 == 0:
-                log.info("%d/%d titoli elaborati (%d richieste)", done, len(rows), client.n_requests)
-    records.sort(key=lambda r: r["isin"])
+                log.info("%d/%d titoli elaborati (%d richieste)", done, len(jobs), client.n_requests)
+
+    # --- stesso ISIN su MOT ed EuroTLX: tengo il record con l'ask più basso (dove compreresti), segno entrambi i mercati
+    by_isin: dict[str, dict] = {}
+    for r in records:
+        prev = by_isin.get(r["isin"])
+        if prev is None:
+            r["markets"] = [r["market"]]; by_isin[r["isin"]] = r; continue
+        a_new, a_old = r["price"].get("ask"), prev["price"].get("ask")
+        keep_new = (a_new is not None and (a_old is None or a_new < a_old))
+        chosen, other = (r, prev) if keep_new else (prev, r)
+        chosen["markets"] = sorted(set(prev.get("markets", [prev["market"]]) + [r["market"]]))
+        chosen["other_market"] = {"market": other["market"], "ask": other["price"].get("ask"), "bid": other["price"].get("bid"), "ref": other["price"].get("ref")}
+        by_isin[r["isin"]] = chosen
+    n_dup = len(records) - len(by_isin)
+    records = sorted(by_isin.values(), key=lambda r: r["isin"])
+    log.info("Titoli unici: %d (%d presenti su entrambi i mercati)", len(records), n_dup)
 
     liquidity_from_history(out, trade_date, records)
     computable = [r for r in records if r["computable"]]
@@ -384,6 +416,9 @@ def main(argv=None):
         "n_total": len(records), "n_computable": len(computable), "n_failed": len(failed),
         "by_kind": dict(Counter(r["kind"] for r in records)),
         "by_segment": dict(Counter(r["segment"] for r in records)),
+        "by_market": dict(Counter(r["market"] for r in records)),
+        "n_both_markets": n_dup,
+        "versions_extra": {"eurotlx": tlx.VERSION},
         "by_currency": dict(Counter(r["currency"] for r in records)),
         "price_source": dict(Counter(r["price"]["source"] for r in records)),
         "price_quality": dict(Counter(r["price"]["quality"] for r in records)),

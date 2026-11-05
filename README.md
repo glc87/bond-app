@@ -1,6 +1,6 @@
 # Bond App — rendimenti netti delle obbligazioni quotate sul MOT
 
-Fotografia giornaliera di tutti i titoli quotati sul MOT di Borsa Italiana
+Fotografia giornaliera di tutti i titoli quotati sul MOT e su EuroTLX (Borsa Italiana)
 (titoli di Stato italiani ed esteri, sovranazionali, corporate) con prezzo,
 valuta e **rendimento netto** per un investitore privato italiano.
 

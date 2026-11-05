@@ -52,3 +52,6 @@
   Svezia) lo YTM coincide entro 0,005: il campo rateo BI su quei titoli usa una convenzione diversa; non si insegue oltre.
 - app v0.7.1: sezione 'Prossime aste del Tesoro' da data/aste.json (calendario MEF 2026, 57 aste; da rinnovare a gennaio 2027).
 - run_daily v0.6.0 / app v0.8.x: regime fiscale personalizzabile; indicatore di liquidità su 20 rilevazioni (badge 'poco liquido' <50%, ordinamento).
+- eurotlx.py v0.1.0 + run_daily v0.7.0: seconda fonte EuroTLX (~2.000 titoli: corporate, bancari, emergenti, Treasury USA...),
+  stesse strutture dati del MOT, merge per ISIN (ask più basso vince, entrambi i mercati annotati), tipologie EuroTLX
+  mappate per aliquota e categoria. app v0.9.0: badge e filtro mercato, altro mercato in scheda, diagnostica.

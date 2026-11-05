@@ -1,8 +1,8 @@
-/* app.js — v0.8.2 — Bond Netto (PWA) */
+/* app.js — v0.9.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const APP_VERSION = "0.8.2";
+  const APP_VERSION = "0.9.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = v => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
@@ -33,11 +33,11 @@
 
   function taxOf(b) { const s = state.settings; return (b.tax_rate <= 0.125001 ? (s.taxGov ?? 12.5) : (s.taxOther ?? 26)) / 100; }
 
-  function category(b) {
-    const t = (b.tipologia || "").toLowerCase();
-    if (t === "titoli di stato italiani") return "gov_it";
-    if (t === "titoli di stato esteri") return "gov_fx";
-    if ((b.tax_reason || "").includes("sovranazionale")) return "supra";
+  function category(b) {   // stessa logica di run_daily.category_of
+    const t = (b.tipologia || "").toLowerCase(), r = b.tax_reason || "";
+    if (t === "titoli di stato italiani" || (r.startsWith("titolo di Stato") && b.country === "IT")) return "gov_it";
+    if (t === "titoli di stato esteri" || r.startsWith("titolo di Stato") || r.startsWith("classificato titolo di Stato")) return "gov_fx";
+    if (r.includes("sovranazionale")) return "supra";
     return "other";
   }
   const CAT_LABEL = { gov_it: "Stato Italia", gov_fx: "Stato estero", supra: "Sovranazionale", other: "Corporate/altro" };
@@ -84,7 +84,7 @@
 
   function applyFilters() {
     const q = $("#q").value.trim().toLowerCase();
-    const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value;
+    const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value, market = $("#f-market").value;
     const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value), cmin = parseFloat($("#f-cmin").value);
     const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked;
     let n = 0;
@@ -92,6 +92,7 @@
       if (state.cat !== "all" && b._cat !== state.cat) return false;
       if (q && !(`${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(q))) return false;
       if (cur && b.currency !== cur) return false;
+      if (market && !(b.markets || [b.market]).includes(market)) return false;
       if (country && b.country !== country) return false;
       if (kind === "computable" && !b._calc) return false;
       if ((kind === "fixed" || kind === "zero") && !(b._calc && b.kind === kind)) return false;
@@ -106,7 +107,7 @@
       if (noMinus && b._price > 100) return false;
       return true;
     });
-    [cur && cur !== "EUR" ? cur : "", country, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
+    [cur && cur !== "EUR" ? cur : "", country, market, kind !== "computable" ? kind : "", !isNaN(ymax) ? 1 : "", !isNaN(nmin) ? 1 : "", !isNaN(lot) ? 1 : "", !isNaN(cmin) ? 1 : "", onlyAsk ? 1 : "", noMinus ? 1 : "", showUncertain ? 1 : "", showStrips ? 1 : "", (!isNaN(ymin) && ymin !== 1) ? 1 : ""].forEach(v => { if (v) n++; });
     $("#filter-count").textContent = n ? `(${n} attivi)` : "";
     sortList();
     state.shown = PAGE;
@@ -169,7 +170,7 @@
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
       <div class="c-name"><div class="name">${esc(b.name)} ${minus}</div>
-        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
+        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span>lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
@@ -284,6 +285,7 @@
       ["Scambi oggi", p.n_trades_today != null ? `${fmtNum(p.n_trades_today, 0)} contratti, ${fmtCur(p.volume_today, b.currency)} nominali` : "–"], ["Min / max anno", p.year_high != null ? `${fmtNum(p.year_low)} / ${fmtNum(p.year_high)}` : "nessuno scambio nell'anno"],
       ["Valuta", b.currency], ["Scadenza", `${fmtDate(b.maturity)} (${fmtNum(b._years, 2)} anni)`],
       ["Cedola", b.kind === "zero" ? "zero coupon" : `${fmtNum(b.coupon_annual)}% annuo, ${FREQ_LABEL[b.coupon_frequency] || b.coupon_frequency_label || "–"}`],
+      ["Mercato", `${b.market === "ETLX" ? "EuroTLX" : "MOT"}${b.other_market ? ` (anche su ${b.other_market.market === "ETLX" ? "EuroTLX" : "MOT"}: ask ${fmtNum(b.other_market.ask)} / bid ${fmtNum(b.other_market.bid)}, rif ${fmtNum(b.other_market.ref)})` : ""}`],
       ["Lotto minimo", fmtCur(b.min_lot, b.currency)], ["Aliquota fiscale applicata", `${fmtNum(taxOf(b) * 100, 1)}% (${esc(b.tax_reason)}${Math.abs(taxOf(b) - b.tax_rate) > 1e-9 ? "; regime personalizzato nelle Impostazioni" : ""})`],
       ["Emesso", b.outstanding ? fmtCur(b.outstanding, b.currency) : "–"], ["Subordinato", b.subordinated || "–"], ["Segmento", b.segment],
     ];
@@ -395,6 +397,7 @@
       ${row("Versioni", Object.entries(m.versions || {}).map(([k, v]) => `${k} ${v}`).join(", ") + `, app ${APP_VERSION}`)}
       ${row("Cambi BCE", m.fx && m.fx.date ? `${fmtDate(m.fx.date)}, ${Object.keys(m.fx.rates).length} valute` : "non disponibili")}
       ${row("Titoli letti / falliti", `${m.n_total} / ${m.n_failed}`)}
+      ${m.by_market ? row("Per mercato", Object.entries(m.by_market).map(([k, v]) => `${k === "ETLX" ? "EuroTLX" : k} ${v}`).join(", ") + (m.n_both_markets ? ` (${m.n_both_markets} su entrambi)` : "")) : ""}
       ${row("Con rendimento calcolato", pct(m.n_computable, m.n_total))}
       </table>
       <h3>Tipi di titolo</h3><table class="kv">${Object.entries(m.by_kind || {}).map(([k, v]) => row(KIND_LABEL[k] || k, v)).join("")}</table>
@@ -470,7 +473,7 @@
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips"].forEach(id => $(id).addEventListener("input", applyFilters));
   $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 

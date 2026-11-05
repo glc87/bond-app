@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.0
+yields.py — v0.3.1
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -199,7 +199,10 @@ def tax_rate_for(tipologia: str, issuer: str, guarantor: str = "") -> tuple[floa
     for k in AGENCY_KEYS:
         if k in up + " ":
             return TAX_OTHER, f"agenzia non equiparata ({k.strip()}, 26%)"
-    if t in GOV_TIPOLOGIE or t == "eurobonds republic of italy":
+    is_gov_tipologia = t in GOV_TIPOLOGIE or t == "eurobonds republic of italy" or any(
+        kk in t for kk in ["titoli di stato", "t-bond", "t-note", "tips", "sovereign", "buoni ordinari", "buoni poliennali",
+                           "certificati del tesoro", "certificati di credito"])
+    if is_gov_tipologia:
         if any(k in up for k in SOVEREIGN_KEYS):
             return TAX_GOV, "titolo di Stato (12,5%)"
         for k in SUPRANATIONAL_KEYS:
