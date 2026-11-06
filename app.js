@@ -1,8 +1,8 @@
-/* app.js — v0.9.6 — Bond Netto (PWA) */
+/* app.js — v0.10.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.9.6";
+  const APP_VERSION = "0.10.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -12,7 +12,19 @@
   const fmtDate = s => s ? new Date(s).toLocaleDateString("it-IT") : "–";
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  const state = { meta: null, bonds: [], settings: loadSettings(), cat: "all", shown: PAGE, filtered: [], compare: new Set() };
+  const state = { meta: null, bonds: [], settings: loadSettings(), cat: "all", shown: PAGE, filtered: [], compare: new Set(), favs: loadFavs() };
+
+  // ---------------- preferiti (stella, salvati su questo dispositivo) ----------------
+  function loadFavs() { try { return new Set(JSON.parse(localStorage.getItem("bond-favs") || "[]")); } catch { return new Set(); } }
+  function saveFavs() { try { localStorage.setItem("bond-favs", JSON.stringify([...state.favs])); } catch {} }
+  function toggleFav(isin) {
+    if (state.favs.has(isin)) state.favs.delete(isin); else state.favs.add(isin);
+    saveFavs(); updateFavChip();
+    $$(`[data-fav="${isin}"]`).forEach(el => { el.classList.toggle("on", state.favs.has(isin)); el.title = state.favs.has(isin) ? "Togli dai preferiti" : "Aggiungi ai preferiti"; });
+    if (state.cat === "fav") applyFilters();
+  }
+  function updateFavChip() { const c = $('[data-cat="fav"]'); if (c) c.textContent = `★ Preferiti${state.favs.size ? ` (${state.favs.size})` : ""}`; }
+  const favBtn = isin => `<button type="button" class="fav ${state.favs.has(isin) ? "on" : ""}" data-fav="${isin}" title="${state.favs.has(isin) ? "Togli dai preferiti" : "Aggiungi ai preferiti"}" aria-label="Preferito">★</button>`;
 
   function loadSettings() {
     try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("bond-settings") || "{}") }; } catch { return { ...DEFAULTS }; }
@@ -49,9 +61,10 @@
   const KIND_LABEL = { fixed: "tasso fisso", zero: "zero coupon", floating: "tasso variabile", inflation: "indicizzato inflazione", stepup: "step-up", callable: "callable", structured: "strutturato", amortizing: "ammortamento", unknown: "altro" };
   const FREQ_LABEL = { 1: "annuale", 2: "semestrale", 4: "trimestrale", 12: "mensile" };
 
-  // Curva Bund: titoli di Stato tedeschi a tasso fisso in EUR con prezzo affidabile -> (anni, YTM lordo), interpolazione lineare
-  function buildBundCurve() {
-    const pts = state.bonds.filter(b => b.country === "DE" && b._cat === "gov_fx" && b.kind === "fixed" && b.currency === "EUR" && b._calc && reliable(b) && !b._strip && b._years > 0.25)
+  // Curve di riferimento: titoli di Stato a tasso fisso in EUR con prezzo affidabile -> (anni, YTM lordo), interpolazione lineare.
+  // Bund = Germania (gov_fx, DE); BTP = Italia (gov_it, esclusi BTP Italia/€i e Valore/Futura perché non "fixed").
+  function buildCurve(pred) {
+    const pts = state.bonds.filter(b => pred(b) && b.kind === "fixed" && b.currency === "EUR" && b._calc && reliable(b) && !b._strip && b._years > 0.25)
       .map(b => [b._years, b._calc.ytm_gross]).sort((a, b) => a[0] - b[0]);
     // media per scadenze vicine (evita zig-zag da singoli titoli)
     const out = []; for (const [x, y] of pts) { const last = out[out.length - 1]; if (last && Math.abs(last[0] - x) < 0.25) { last[0] = (last[0] * last[2] + x) / (last[2] + 1); last[1] = (last[1] * last[2] + y) / (last[2] + 1); last[2]++; } else out.push([x, y, 1]); }
@@ -80,10 +93,13 @@
       b._uncertain = uncertainReason(b);
       b._strip = isStrip(b);
     }
-    state.bundCurve = buildBundCurve();
+    state.bundCurve = buildCurve(b => b.country === "DE" && b._cat === "gov_fx");
+    state.btpCurve = buildCurve(b => b.country === "IT" && b._cat === "gov_it");
     for (const b of state.bonds) {
-      const ref = b._calc ? curveAt(state.bundCurve, b._years) : null;
-      if (b._calc) b._calc.spread_bund = ref != null ? b._calc.ytm_gross - ref : null;
+      if (!b._calc) continue;
+      const rb = curveAt(state.bundCurve, b._years), ri = curveAt(state.btpCurve, b._years);
+      b._calc.spread_bund = rb != null ? b._calc.ytm_gross - rb : null;
+      b._calc.spread_btp = ri != null ? b._calc.ytm_gross - ri : null;
     }
   }
 
@@ -94,7 +110,8 @@
     const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked, showInst = $("#f-inst").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
-      if (state.cat !== "all" && b._cat !== state.cat) return false;
+      if (state.cat === "fav") { if (!state.favs.has(b.isin)) return false; }
+      else if (state.cat !== "all" && b._cat !== state.cat) return false;
       if (q && !(`${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(q))) return false;
       if (cur && b.currency !== cur) return false;
       if (market && !(b.markets || [b.market]).includes(market)) return false;
@@ -108,9 +125,11 @@
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
       if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
-      if (!showUncertain && b._uncertain) return false;
-      if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
-      if (!showStrips && b._strip) return false;
+      if (state.cat !== "fav") {   // nei preferiti si vede tutto ciò che hai scelto, anche se incerto/istituzionale/strip
+        if (!showUncertain && b._uncertain) return false;
+        if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
+        if (!showStrips && b._strip) return false;
+      }
       if (noMinus && b._price > 100) return false;
       return true;
     });
@@ -143,6 +162,7 @@
     sortList();
     state.shown = PAGE;
     render();
+    syncHash();
   }
 
   function sortList() {
@@ -154,7 +174,7 @@
         case "price": return b._price;
         case "coupon": return b.coupon_annual;
         case "name": return b.name;
-        case "coupon_net_yield": case "price_yield": case "ytm_net_all": case "spread_bund": return b._calc ? b._calc[key] : null;
+        case "coupon_net_yield": case "price_yield": case "ytm_net_all": case "spread_bund": case "spread_btp": return b._calc ? b._calc[key] : null;
         case "liq": return b._liq;
         default: return b._calc ? b._calc[key] : null;
       }
@@ -200,13 +220,13 @@
     const sel = state.compare.has(b.isin);
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
-      <div class="c-name"><div class="name">${esc(b.name)} ${minus}</div>
+      <div class="c-name"><div class="name">${favBtn(b.isin)}${esc(b.name)} ${minus}</div>
         <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span class="${b.min_lot >= INST_LOT ? "badge warn" : ""}" title="${b.min_lot >= INST_LOT ? "taglio istituzionale" : "lotto minimo"}">lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
       <div class="c-net">${c ? `<div class="main">${fmtPct(c.ytm_net_all)}</div><div class="small">netto annuo</div><div class="small tot" title="guadagno netto totale (tasse, commissioni, bollo) sull'esborso, da oggi alla scadenza, senza reinvestire le cedole">${totalReturn(c)}</div>` : `<div class="main na">n.d.</div><div class="small">${esc(b.not_computable_reason || KIND_LABEL[b.kind])}</div>`}</div>
-      <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>${c.spread_bund != null ? `<div><span class="lbl">vs Bund</span>${c.spread_bund >= 0 ? "+" : ""}${fmtPct(c.spread_bund)}</div>` : ""}` : ""}</div>
+      <div class="c-ytm">${c ? `<div><span class="lbl">da cedola</span>${fmtPct(c.coupon_net_yield)}</div><div><span class="lbl">da prezzo</span>${fmtPct(c.price_yield)}</div>${c.spread_btp != null ? `<div title="differenza di rendimento lordo rispetto a un BTP di pari scadenza"><span class="lbl">vs BTP</span>${c.spread_btp >= 0 ? "+" : ""}${fmtPct(c.spread_btp)}</div>` : ""}${c.spread_bund != null ? `<div title="differenza di rendimento lordo rispetto a un Bund di pari scadenza"><span class="lbl">vs Bund</span>${c.spread_bund >= 0 ? "+" : ""}${fmtPct(c.spread_bund)}</div>` : ""}` : ""}</div>
     </div>`;
   }
 
@@ -247,7 +267,8 @@
       ["Cedole nette totali", (b, c) => c ? fmtCur(c.coupons_net_total_eur, b.currency) : "–"],
       ["Guadagno netto a scadenza", (b, c) => c ? `<b>${fmtCur(c.net_gain_total_eur, b.currency)}</b>` : "–"],
       ["Minusvalenza a scadenza", (b, c) => c && c.minus_eur > 0 ? `<span class="ko">${fmtCur(c.minus_eur, b.currency)}</span>` : "–"],
-      ["Duration modificata (BI)", b => fmtNum(b.bi.mod_duration)],
+      ["Rischio tasso: −% prezzo per +1 punto", (b, c) => c && c.mod_duration != null ? `${fmtPct(c.mod_duration / 100, 1)} <span class="small">(duration ${fmtNum(c.mod_duration, 1)})</span>` : fmtNum(b.bi.mod_duration)],
+      ["Spread vs BTP / vs Bund", b => b._calc ? `${b._calc.spread_btp != null ? (b._calc.spread_btp >= 0 ? "+" : "") + fmtPct(b._calc.spread_btp) : "–"} / ${b._calc.spread_bund != null ? (b._calc.spread_bund >= 0 ? "+" : "") + fmtPct(b._calc.spread_bund) : "–"}` : "–"],
       ["Lotto minimo", b => fmtCur(b.min_lot, b.currency)],
     ];
     $("#cmp-body").innerHTML = `<div class="cmp-scroll"><table class="cmp"><thead><tr><th></th>${bonds.map(b => `<th><div class="name">${esc(b.name)}</div><div class="small">${esc(b.isin)}</div><button class="link" data-isin="${b.isin}">scheda</button> · <button class="link" data-uncmp="${b.isin}">togli</button></th>`).join("")}</tr></thead>
@@ -298,13 +319,15 @@
   function openDetail(isin) {
     const b = state.bonds.find(x => x.isin === isin); if (!b) return;
     $("#d-name").textContent = b.name;
-    $("#d-sub").innerHTML = `<span class="isin-row"><code>${esc(b.isin)}</code><button class="copy" data-copy="${esc(b.isin)}" title="Copia ISIN">⧉ copia</button></span> · ${esc(b.issuer)} · ${CAT_LABEL[b._cat]} · ${KIND_LABEL[b.kind]}`;
+    $("#d-sub").innerHTML = `${favBtn(b.isin)} <span class="isin-row"><code>${esc(b.isin)}</code><button class="copy" data-copy="${esc(b.isin)}" title="Copia ISIN">⧉ copia</button></span> · ${esc(b.issuer)} · ${CAT_LABEL[b._cat]} · ${KIND_LABEL[b.kind]}`;
     const nominalDefault = Math.max(state.settings.nominal, b.min_lot || 0);
     $("#d-body").innerHTML = detailHTML(b, nominalDefault);
     $("#detail").classList.remove("hidden");
     loadChart(b);
     const inp = $("#d-amount");
-    if (inp) inp.addEventListener("input", () => { const n = parseFloat(inp.value); if (n > 0) $("#d-calc").innerHTML = calcHTML(b, n); });
+    const nominalNow = () => { const n = inp ? parseFloat(inp.value) : NaN; return n > 0 ? n : nominalDefault; };
+    if (inp) inp.addEventListener("input", () => { const n = parseFloat(inp.value); if (n > 0) { $("#d-calc").innerHTML = calcHTML(b, n); if (window.BondSim) BondSim.mountSim(b, nominalNow); } });
+    if (window.BondSim) BondSim.mountSim(b, nominalNow);
   }
 
   function detailHTML(b, nominal) {
@@ -333,7 +356,7 @@
     const calc = b._calc ? `<div class="amount"><label>Importo nominale</label><input id="d-amount" type="number" step="${b.min_lot || 1000}" min="${b.min_lot || 1000}" value="${nominal}"> €</div>
       <div id="d-calc">${calcHTML(b, nominal)}</div>` : `<div class="note">Rendimento non calcolato: ${esc(b.not_computable_reason)}</div>`;
     const addBtn = b._calc ? `<div class="row"><button class="btn ghost" data-pf-add="${b.isin}">+ Aggiungi al portafoglio</button></div>` : "";
-    return `${anomalies}${calc}${addBtn}<h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
+    return `${anomalies}${calc}${addBtn}<div id="d-sim"></div><h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
       <p class="hint" style="margin-top:12px"><a href="${esc(b.scheda_url)}" target="_blank" rel="noopener">Scheda su Borsa Italiana ↗</a></p>`;
   }
 
@@ -352,6 +375,7 @@
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza (${holdLabel(c.years_to_maturity)})</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)} <span class="small">= ${totalReturn(c)} (non annualizzato)</span></div></div>
 
     </div>${minus}${src}${exc}
+    ${rateRiskHTML(b, c, nominal)}
     ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
     <h3>Flussi per ${nominal.toLocaleString("it-IT")} ${esc(b.currency)} nominali</h3><table class="kv">
       <tr><td>Regolamento (T+2)</td><td>${fmtDate(c.settle_date)}</td></tr>
@@ -364,9 +388,19 @@
       <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>
     <h3>Altre misure (per confronto con altri siti)</h3><table class="kv">
       <tr><td>YTM lordo (come Borsa Italiana)</td><td>${fmtPct(c.ytm_gross)}</td></tr>
+      <tr><td>Spread vs BTP di pari scadenza (lordo)${b.currency !== "EUR" ? " — in valuta, include il rischio cambio" : ""}</td><td>${b._calc && b._calc.spread_btp != null ? (b._calc.spread_btp >= 0 ? "+" : "") + fmtPct(b._calc.spread_btp) : "–"}</td></tr>
       <tr><td>Spread vs Bund di pari scadenza (lordo)${b.currency !== "EUR" ? " — in valuta, include il rischio cambio" : ""}</td><td>${b._calc && b._calc.spread_bund != null ? (b._calc.spread_bund >= 0 ? "+" : "") + fmtPct(b._calc.spread_bund) : "–"}</td></tr>
       <tr><td>YTM netto solo tasse (senza commissioni e bollo; tassa anche la plusvalenza, a differenza di BI)</td><td>${fmtPct(c.ytm_net_tax)}</td></tr>
       <tr><td>Netto annuo semplice (guadagno totale ÷ costo ÷ anni, senza reinvestimento)</td><td>${fmtPct(c.simple_net_all)}</td></tr></table>`;
+  }
+
+  // Rischio tasso: duration modificata = variazione % del prezzo tel quel per +1 punto di rendimento (stessa formula di BI, verificata entro 0,02 su 1.907 titoli su 2.043)
+  function rateRiskHTML(b, c, nominal) {
+    if (c.mod_duration == null) return "";
+    const d = c.mod_duration, tq = (b._price + c.accrued_gross) / 100 * nominal;
+    const lvl = d < 2 ? "basso" : d < 5 ? "medio" : d < 9 ? "alto" : "molto alto";
+    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): se i rendimenti di mercato salgono di 1 punto, il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
+      (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); se scendono di 1 punto, sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100.</div>`;
   }
 
   function seriesShard(isin) {   // identica a run_daily.series_shard
@@ -492,6 +526,7 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); });
   document.addEventListener("click", async e => {
     const lk = e.target.closest("button.link[data-isin], .lnk[data-isin]"); if (lk) { openDetail(lk.dataset.isin); return; }
+    const fv = e.target.closest("[data-fav]"); if (fv) { toggleFav(fv.dataset.fav); return; }
     const cp = e.target.closest("[data-copy]");
     if (cp) {
       const txt = cp.dataset.copy; let ok = false;
@@ -504,7 +539,7 @@
     const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin);
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
-    document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
+    $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
   ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
   function resetFilters() { (state.activeFilters || []).forEach(a => a.reset()); applyFilters(); }
   $("#filter-reset").addEventListener("click", resetFilters);
@@ -514,7 +549,53 @@
     if (btn.dataset.af === "all") return resetFilters();
     const a = (state.activeFilters || [])[+btn.dataset.af]; if (a) { a.reset(); applyFilters(); }
   });
-  $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); });
+  $("#sort").addEventListener("change", () => { sortList(); state.shown = PAGE; render(); syncHash(); });
+
+  // ---------------- esporta CSV della lista filtrata ----------------
+  function exportCSV() {
+    const cols = [["ISIN", b => b.isin], ["Nome", b => b.name], ["Emittente", b => b.issuer], ["Categoria", b => CAT_LABEL[b._cat]], ["Paese", b => b.country], ["Mercato", b => (b.markets || [b.market]).join("+")],
+      ["Valuta", b => b.currency], ["Scadenza", b => b.maturity], ["Anni", b => num(b._years, 2)], ["Tipo", b => KIND_LABEL[b.kind]], ["Cedola %", b => num(b.coupon_annual, 3)], ["Frequenza", b => FREQ_LABEL[b.coupon_frequency] || ""],
+      ["Prezzo", b => num(b._price, 3)], ["Fonte prezzo", b => quality(b)], ["Rateo netto", b => b._calc ? num(b._calc.accrued_net, 3) : ""], ["Lotto minimo", b => b.min_lot],
+      ["Netto annuo %", b => pct(b._calc && b._calc.ytm_net_all)], ["Di cui da cedola %", b => pct(b._calc && b._calc.coupon_net_yield)], ["Di cui da prezzo %", b => pct(b._calc && b._calc.price_yield)],
+      ["Totale a scadenza %", b => b._calc && b._calc.cost_total_eur > 0 ? pct(b._calc.net_gain_total_eur / b._calc.cost_total_eur) : ""], ["YTM lordo %", b => pct(b._calc && b._calc.ytm_gross)],
+      ["YTM netto solo tasse %", b => pct(b._calc && b._calc.ytm_net_tax)], ["Spread vs BTP", b => pct(b._calc && b._calc.spread_btp)], ["Spread vs Bund", b => pct(b._calc && b._calc.spread_bund)],
+      ["Duration mod.", b => b._calc ? num(b._calc.mod_duration, 2) : ""], ["Aliquota %", b => num(taxOf(b) * 100, 1)], ["Incerto", b => b._uncertain || ""], ["Preferito", b => state.favs.has(b.isin) ? "sì" : ""]];
+    const num = (v, d) => v == null ? "" : v.toFixed(d).replace(".", ",");
+    const pct = v => v == null ? "" : (v * 100).toFixed(3).replace(".", ",");
+    const cell = v => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const lines = [cols.map(c => cell(c[0])).join(";"), ...state.filtered.map(b => cols.map(c => cell(c[1](b))).join(";"))];
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });   // BOM: Excel italiano apre con ; e virgola decimale
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `bond-netto-${state.meta.trade_date}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  $("#btn-csv").addEventListener("click", exportCSV);
+
+  // ---------------- filtri nell'URL (link condivisibile) ----------------
+  const HASH_FIELDS = { q: "#q", cur: "#f-cur", country: "#f-country", market: "#f-market", kind: "#f-kind", ymin: "#f-ymin", ymax: "#f-ymax", nmin: "#f-nmin", cmin: "#f-cmin", lot: "#f-lot",
+    inst: "#f-inst", unc: "#f-uncertain", strips: "#f-strips", ask: "#f-ask", nominus: "#f-nominus", sort: "#sort" };
+  const HASH_DEFAULT = { cur: "EUR", kind: "computable", ymin: "1", sort: "ytm_net_all:desc" };
+  function syncHash() {
+    const u = new URLSearchParams();
+    for (const [k, sel] of Object.entries(HASH_FIELDS)) { const el = $(sel); const v = el.type === "checkbox" ? (el.checked ? "1" : "") : el.value; if (v && v !== (HASH_DEFAULT[k] ?? "")) u.set(k, v); }
+    if (state.cat !== "all") u.set("cat", state.cat);
+    const h = u.toString(); history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
+  }
+  function applyHash() {
+    const h = location.hash.replace(/^#/, ""); if (!h) return false;
+    const u = new URLSearchParams(h); let any = false;
+    for (const [k, sel] of Object.entries(HASH_FIELDS)) {
+      const el = $(sel); const v = u.get(k); if (v == null) continue; any = true;
+      if (el.type === "checkbox") el.checked = v === "1"; else if (el.tagName === "SELECT") { if ([...el.options].some(o => o.value === v)) el.value = v; } else el.value = v;
+    }
+    const cat = u.get("cat"); if (cat && $(`[data-cat="${cat}"]`)) { state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); any = true; }
+    return any;
+  }
+  $("#btn-share").addEventListener("click", async () => {
+    syncHash(); const url = location.href; let ok = false;
+    try { if (navigator.share) { await navigator.share({ title: "Bond Netto: selezione", url }); ok = true; } } catch {}
+    if (!ok) { try { await navigator.clipboard.writeText(url); ok = true; } catch {} }
+    const b = $("#btn-share"); const old = b.textContent; b.textContent = ok ? "✓ link copiato" : "non riuscito"; setTimeout(() => { b.textContent = old; }, 1800);
+  });
   $("#more-btn").addEventListener("click", () => { state.shown += PAGE; render(); });
 
   // ---------------- avvio ----------------
@@ -531,6 +612,8 @@
       // default: solo EUR. I rendimenti in TRY/BRL/MXN sono "veri" nella loro valuta ma privi di senso in euro
       // (la valuta si svaluta quanto rende): finché manca la conversione in EUR, le altre valute vanno scelte apposta.
       if ([...$("#f-cur").options].some(o => o.value === "EUR")) $("#f-cur").value = "EUR";
+      applyHash();   // filtri da link condiviso (sovrascrivono i default)
+      updateFavChip();
       const runAt = new Date(d.meta.run_at);
       $("#meta").textContent = `${d.meta.n_total} titoli MOT · rilevazione ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} con rendimento`;
       applyFilters();
@@ -540,7 +623,7 @@
       $("#meta").textContent = "Dati non disponibili: " + e.message;
     }
   }
-  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail };
+  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail, toggleFav, reliable, quality };
   load();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

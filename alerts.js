@@ -1,4 +1,4 @@
-/* alerts.js — v0.1.0 — Avvisi: regole su rendimento/prezzo valutate a ogni apertura dell'app.
+/* alerts.js — v0.1.1 — Avvisi: regole su rendimento/prezzo valutate a ogni apertura dell'app.
    Le stesse regole, esportate in alerts.json nel repository, vengono valutate anche dal job giornaliero
    (scraper/run_daily.py: evaluate_alerts) che apre una Issue su GitHub -> email di notifica. */
 (() => {
@@ -64,9 +64,9 @@
         <input name="label" placeholder="nota (facoltativa)">
         <button class="btn" type="submit">Aggiungi regola</button></form>
       <h3>Notifica via email</h3>
-      <p class="hint">L'app controlla le regole quando la apri. Per ricevere un'email quando il job giornaliero le trova scattate:
-        copia il testo qui sotto nel file <code>alerts.json</code> del repository (GitHub → bond-app → Add file / modifica → Commit). Il job apre una "Issue" e GitHub ti manda l'email.</p>
-      <div class="row"><button class="btn ghost" id="alerts-copy" data-copy="${esc(JSON.stringify(rules.map(({ id, ...r }) => r)))}">⧉ Copia alerts.json</button>
+      <p class="hint">L'app controlla le regole quando la apri. Per ricevere un'email quando il job giornaliero le trova scattate, le regole devono stare nel file <code>alerts.json</code> del repository: il job apre una "Issue" e GitHub ti manda l'email.</p>
+      <div class="row">${window.BondSync ? BondSync.alertsButton() : ""}</div>
+      <div class="row"><button class="btn ghost" id="alerts-copy" data-copy="${esc(JSON.stringify(rules.map(({ id, ...r }) => r)))}">⧉ Copia alerts.json (manuale)</button>
         <a class="btn ghost" href="https://github.com/glc87/bond-app/edit/main/alerts.json" target="_blank" rel="noopener">Apri alerts.json su GitHub ↗</a></div>`;
     $("#alerts").classList.remove("hidden");
   }
@@ -83,5 +83,5 @@
     const d = e.target.closest("[data-alert-del]"); if (d) { rules = rules.filter(r => r.id !== d.dataset.alertDel); save(); open(); }
   });
   $("#btn-alerts").addEventListener("click", open);
-  window.BondAlerts = { evaluateAll, open };
+  window.BondAlerts = { evaluateAll, open, rules: () => rules.map(({ id, ...r }) => r) };
 })();

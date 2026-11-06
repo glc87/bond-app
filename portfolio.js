@@ -1,4 +1,4 @@
-/* portfolio.js — v0.2.1 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
+/* portfolio.js — v0.2.3 — Portafoglio, zainetto fiscale, calendario cedole (dati salvati sul dispositivo) */
 (() => {
   "use strict";
   const A = window.BondApp;             // helper esposti da app.js
@@ -121,8 +121,9 @@
       ${salesHTML()}
       <h3>Cedole e rimborsi nei prossimi 12 mesi (netti)</h3>${cal}
       <h3>Zainetto fiscale</h3>${zain}
-      <h3>Backup</h3><div class="row"><button class="btn ghost" id="pf-export">Esporta</button><label class="btn ghost">Importa <input type="file" id="pf-import" accept="application/json" hidden></label></div>
-      <p class="hint">I dati del portafoglio restano solo su questo dispositivo. Esporta un backup prima di cambiare telefono o cancellare i dati del browser.</p>`;
+      <h3>Backup</h3><div class="row">${window.BondSync ? BondSync.portfolioButtons() : ""}</div>
+      <div class="row"><button class="btn ghost" id="pf-export">Esporta file</button><label class="btn ghost">Importa file <input type="file" id="pf-import" accept="application/json" hidden></label></div>
+      <p class="hint">I dati del portafoglio restano su questo dispositivo. Il backup su GitHub è cifrato con la tua passphrase (il repository è pubblico, ma il file senza passphrase è illeggibile).</p>`;
 
     // datalist titoli
     const dl = $("#isin-list"); const frag = document.createDocumentFragment();
@@ -202,5 +203,12 @@
     }
   });
   $("#btn-pf").addEventListener("click", open);
-  window.BondPortfolio = { open, count: () => pf.positions.length };
+  // usato dal costruttore di scala: aggiunge piu' posizioni in una volta (data = oggi)
+  function addPositions(list) {
+    for (const x of list) pf.positions.push({ id: uid(), isin: x.isin, nominal: x.nominal, price: x.price, date: todayISO(), commission: x.commission || 0 });
+    save();
+  }
+  function exportData() { return { exported: new Date().toISOString(), ...pf }; }
+  function importData(d) { if (!d || !Array.isArray(d.positions)) throw new Error("backup non valido"); pf = { positions: d.positions, minus: d.minus || [], sales: d.sales || [] }; save(); open(); }
+  window.BondPortfolio = { open, addPositions, exportData, importData, count: () => pf.positions.length };
 })();

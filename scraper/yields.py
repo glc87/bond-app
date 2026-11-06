@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.4
+yields.py — v0.3.5
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass, asdict
 from datetime import date, timedelta
 from typing import Optional
 
-VERSION = "0.3.4"
+VERSION = "0.3.5"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -156,7 +156,8 @@ def classify(name: str, tipologia: str, structure: str, tipo_bond: str,
     # ammortizzanti / sinkable: rimborso del capitale a rate, il piano non è nelle pagine BI
     if " sink" in n or " amort" in n or "amortiz" in st or "ammort" in tb:
         return BondClass("amortizing", False, "rimborso a rate (ammortamento/sinkable): piano di rimborso non disponibile")
-    if any(k in n for k in [" cct", " mc ", " fr ", " tv ", " float", " tm "]) or "floating" in tb or "variabile" in tb or "tv" in tb.split():
+    if (any(k in n for k in [" cct", " mc ", " fr ", " tv ", " float", " tm "]) or "floating" in tb or "variabile" in tb or "tv" in tb.split()
+            or re.search(r"eur\s?\d+\s?m|euribor|sofr|estr|libor|sonia|\bfrn\b", n)):   # "Bnl Eur3m+0.4975%", "Italy 29eur Frn" (06/11/2026)
         return BondClass("floating", False, "tasso variabile: cedole future non note")
     if any(k in n for k in [" valore", " futura", " più", " piu ", " step", " sc ", " oc ", " su "]) or "step" in st or "step" in tb:
         return BondClass("stepup", False, "cedola step-up/strutturata: calcolo non supportato in questa fase")
@@ -298,6 +299,19 @@ def accrued_interest(coupon_annual: float, freq: int, settle: date, prev: Option
     return per * (settle - prev).days / notional_period_days(next_, freq)
 
 
+def modified_duration(flows: list[tuple[float, float]], y: Optional[float]) -> Optional[float]:
+    """Duration modificata = Macaulay / (1+y), sui flussi positivi (cedole e rimborso) scontati al rendimento y
+    (capitalizzazione annua, tempi ACT/365 come l'IRR). Approssima la variazione % del prezzo tel quel per +1 punto di tasso.
+    Borsa Italiana pubblica la stessa grandezza: verificata entro 0,02 su BTP e corporate (06/11/2026)."""
+    if y is None or y <= -1:
+        return None
+    pv = sum(cf / (1 + y) ** t for t, cf in flows if t > 0)
+    if pv <= 0:
+        return None
+    mac = sum(t * cf / (1 + y) ** t for t, cf in flows if t > 0) / pv
+    return mac / (1 + y)
+
+
 def irr(flows: list[tuple[float, float]], guess: float = 0.03) -> Optional[float]:
     """flows = [(t_anni, importo)], tasso annuo composto. Newton con fallback bisezione."""
     def npv(r):
@@ -353,6 +367,8 @@ class YieldResult:
     ytm_net_all: Optional[float]
     simple_net_all: Optional[float]      # netto annuo semplice, senza reinvestimento
     current_yield_gross: float           # cedola annua / prezzo
+    mod_duration: Optional[float]        # duration modificata (flussi lordi, capitalizzazione annua): -dP/P per +1 punto di tasso
+    first_coupon_factor: float           # frazione della prima cedola (1 = regolare; <1 prima cedola corta)
     # importi in € sul nominale di riferimento
     nominal: float
     cost_total_eur: float                # prezzo + rateo netto + commissioni
@@ -399,6 +415,7 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     # --- YTM lordo (nessun costo, nessuna tassa): confrontabile con BI "lordo"
     flows_g = [(0.0, -(price + acc_g))] + [(yf(d), cpn_g(i)) for i, d in enumerate(future)] + [(yf(maturity), 100.0)]
     ytm_g = irr(flows_g)
+    mod_dur = modified_duration(flows_g, ytm_g)
 
     # --- YTM netto solo tasse (cedole, rateo E plusvalenza): il nostro dato
     flows_n = [(0.0, -(price + acc_n))] + [(yf(d), cpn_n(i)) for i, d in enumerate(future)] + [(yf(maturity), redemption_net)]
@@ -455,7 +472,7 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
         years_to_maturity=years, tax_rate=tax_rate, accrued_gross=acc_g, accrued_net=acc_n,
         next_coupon_date=next_, coupon_net_per_period=per_net,
         ytm_gross=ytm_g, ytm_net_tax=ytm_n, ytm_net_bi_convention=ytm_bi_conv, ytm_net_all=ytm_all, simple_net_all=simple_all,
-        current_yield_gross=(coupon_annual / price if price else 0.0),
+        current_yield_gross=(coupon_annual / price if price else 0.0), mod_duration=mod_dur, first_coupon_factor=f1,
         nominal=N, cost_total_eur=cost_total, commission_eur=comm, bollo_total_eur=bollo_total,
         coupons_net_total_eur=coupons_net_total, redemption_net_eur=redemption_eur,
         capital_gain_tax_eur=cg_tax / 100.0 * N, minus_eur=minus / 100.0 * N,

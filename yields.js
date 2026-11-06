@@ -1,4 +1,4 @@
-/* yields.js — v0.3.1
+/* yields.js — v0.3.2
    Porting fedele di scraper/yields.py (compute) in JavaScript, per ricalcolare i
    rendimenti all-in nel browser con i parametri scelti dall'utente.
    Deve dare gli stessi numeri di Python a parità di input: vedi tools/check_js_vs_py.mjs. */
@@ -58,6 +58,12 @@
     if (freq <= 0 || prev == null || next == null || next <= prev) return 0;
     return (couponAnnual / freq) * ((settle - prev) / DAY) / notionalPeriodDays(next, freq);
   }
+  function modifiedDuration(flows, y) {   // identica a yields.py modified_duration
+    if (y == null || y <= -1) return null;
+    let pv = 0, tpv = 0;
+    for (const [t, cf] of flows) if (t > 0) { const d = cf / Math.pow(1 + y, t); pv += d; tpv += t * d; }
+    return pv > 0 ? (tpv / pv) / (1 + y) : null;
+  }
   function irr(flows, guess = 0.03) {
     const npv = r => flows.reduce((s, [t, cf]) => s + cf / Math.pow(1 + r, t), 0);
     let lo = -0.99, hi = 5.0, flo = npv(lo), fhi = npv(hi);
@@ -108,6 +114,7 @@
     const flowsG = [[0, -(price + accG)], ...future.map((d, i) => [yf(d), cpnG(i)]), [yf(maturity), 100]];
     const flowsN = [[0, -(price + accN)], ...future.map((d, i) => [yf(d), cpnN(i)]), [yf(maturity), redemptionNet]];
     const ytmG = irr(flowsG), ytmN = irr(flowsN);
+    const modDur = modifiedDuration(flowsG, ytmG);
 
     const N = Math.max(p.nominal, 0);
     const ctvGross = (price + accG) / 100 * N;
@@ -133,14 +140,28 @@
       tax_rate: tax, accrued_gross: accG, accrued_net: accN, next_coupon_date: toISO(next),
       coupon_net_per_period: perNet, n_coupons: future.length,
       ytm_gross: ytmG, ytm_net_tax: ytmN, ytm_net_all: ytmAll, simple_net_all: simpleAll,
-      current_yield_gross: price ? couponAnnual / price : 0,
+      current_yield_gross: price ? couponAnnual / price : 0, mod_duration: modDur,
       nominal: N, cost_total_eur: costTotal, commission_eur: comm, bollo_total_eur: bolloTotal,
       coupons_net_total_eur: couponsNetTotal, redemption_net_eur: redemptionEur,
       capital_gain_tax_eur: cgTax / 100 * N, minus_eur: minus / 100 * N, net_gain_total_eur: netGain,
-      coupon_dates: future.map(toISO),
+      coupon_dates: future.map(toISO), first_coupon_factor: f1,
     };
   }
 
-  const api = { compute, settlementDate, parseISO, toISO, irr, VERSION: "0.3.1" };
+  // Prezzo tel quel e rateo a una data futura, dato un rendimento lordo (per il simulatore "se vendo prima")
+  function priceAtYield(bond, settle, y) {
+    const maturity = parseISO(bond.maturity), accrualStart = parseISO(bond.accrual_start), firstCoupon = parseISO(bond.first_coupon_date);
+    let couponAnnual = bond.coupon_annual || 0, freq = bond.coupon_frequency || 0;
+    if (bond.kind === "zero") { couponAnnual = 0; freq = 0; }
+    const { future, prev } = couponSchedule(maturity, freq, settle, accrualStart, firstCoupon);
+    const next = future.length ? future[0] : null;
+    const per = freq ? couponAnnual / freq : 0, f1 = firstCouponFactor(prev, next, freq, accrualStart);
+    const yf = d => (d - settle) / DAY / 365.0;
+    const dirty = future.reduce((s, d, i) => s + per * (i === 0 ? f1 : 1) / Math.pow(1 + y, yf(d)), 0) + 100 / Math.pow(1 + y, yf(maturity));
+    const accG = accrued(couponAnnual, freq, settle, prev, next);
+    return { dirty, clean: dirty - accG, accrued: accG, future, perCoupon: per, firstFactor: f1 };
+  }
+
+  const api = { compute, priceAtYield, settlementDate, addMonths, couponSchedule, accrued, parseISO, toISO, irr, modifiedDuration, DAY, VERSION: "0.3.2" };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Yields = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -23,3 +23,12 @@ Actions → "Aggiornamento giornaliero bond" → Run workflow (opzionale `limit`
 
 ## Disclaimer
 Dati indicativi a solo scopo informativo, non costituiscono consulenza. Fonte prezzi: Borsa Italiana (ritardo 15').
+
+
+## Funzioni aggiunte il 06/11/2026
+- **Spread vs BTP** e vs Bund (curve interpolate dai titoli quotati), **rischio tasso** (duration modificata, stessa formula di Borsa Italiana).
+- **★ Preferiti**, **⬇ CSV** della lista filtrata, **🔗 link condivisibile** (filtri nell'URL).
+- **Se vendo prima**: simulatore in scheda (anni di detenzione, scenario tassi) con tasse, seconda commissione e bollo pro rata.
+- **🪜 Scala di scadenze**: portafoglio a gradini dalla lista filtrata, emittenti diversi, lotti minimi, flussi per anno.
+- **Sincronizzazione GitHub** (Impostazioni): con un token fine-grained (solo questo repository, Contents read/write) l'app salva
+  `alerts.json` (→ Issue → email dal job) e un backup **cifrato** del portafoglio in `user/portfolio.enc` (AES-GCM, passphrase).

@@ -80,3 +80,24 @@
   invece di "Stato estero" (172 titoli; aliquota invariata 12,5%). Effetto sui dati dal prossimo run.
 - app v0.9.6 / app.css v0.2.3: pulsanti del pannello filtri distinti dai chip: "Mostra risultati ↓" pieno blu a tutta
   larghezza, "↺ Azzera filtri" grigio con bordo; chip dei filtri attivi a bordo tratteggiato su fondo azzurro chiaro.
+- 06/11/2026 — verifica EuroTLX chiusa: a parità di prezzo di riferimento, i rendimenti pubblicati da BI su EuroTLX cambiano
+  il mattino dopo e coincidono col nostro motore (Daimler 3,82→3,78 = nostro 3,78; UniCredit 4,15→4,10 = 4,10; Italgas 4,14→4,05
+  = 4,05; rateo identico al 5° decimale in entrambi i giorni). BI calcola il rendimento EuroTLX sul riferimento del giorno prima.
+  Nessuna modifica al motore; meta.bi_check dal run del 06/11 lo misura su tutti i titoli.
+- yields v0.3.5 / yields.js v0.3.2: duration modificata (Macaulay/(1+y) su flussi lordi, ACT/365): coincide con quella di BI
+  entro 0,02 su 1.907 titoli su 2.043 (entro 0,05: 2.001). Esposto first_coupon_factor. Tasso variabile anche per
+  "Eur3m+", Euribor, Frn, Sofr, Sonia (Bnl/Mps covered erano calcolati come fissi).
+- app v0.10.0 (app.css 0.2.5, sw 0.2.1): spread vs BTP (curva BTP come quella Bund) in lista, scheda, confronto e ordinamento;
+  rischio tasso in scheda ("se i tassi salgono di 1 punto, prezzo −X% ≈ −N €"); ★ Preferiti con sezione dedicata (nei
+  preferiti si vede tutto, anche incerti/istituzionali); ⬇ CSV della lista filtrata (; e virgola decimale, BOM per Excel);
+  🔗 link condivisibile con i filtri nell'URL (#country=DE&nmin=2…), riaperto ripristina filtri e ordinamento.
+- sim.js v0.1.0: simulatore "Se vendo prima della scadenza" in scheda (anni di detenzione, scenario tassi 0/+1/−1/+2:
+  prezzo di uscita dal rendimento, cedole e rateo netti, tassa sulla plusvalenza o minus, seconda commissione, bollo pro rata).
+  Verifica: priceAtYield inverte compute su 2.800 titoli con scarto 3,6e-13; vendita 6 mesi prima della scadenza a tassi
+  invariati dà 3,368% vs 3,375% a scadenza (la differenza è la seconda commissione). Costruttore di scala 🪜: importo,
+  orizzonte, gradini, universo (lista filtrata / BTP / Stati e sovranazionali), miglior netto per gradino con emittenti diversi,
+  nominali ai lotti minimi, flussi per anno, salvataggio nei preferiti o nel portafoglio (portfolio v0.2.3 addPositions).
+- sync.js v0.1.0: sincronizzazione GitHub con token fine-grained (solo repo, Contents read/write), salvato sul dispositivo:
+  "Salva alerts.json su GitHub" dagli Avvisi (il job apre la Issue → email), backup del portafoglio CIFRATO (AES-GCM 256,
+  chiave PBKDF2-SHA256 200k iterazioni da passphrase) in user/portfolio.enc e ripristino da altro dispositivo. Testato con
+  API simulata: token errato, sha/aggiornamento, "già aggiornato", round-trip cifra/decifra, passphrase errata.

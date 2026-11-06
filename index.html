@@ -17,7 +17,7 @@
     <h1>Bond Netto</h1>
     <div class="sub" id="meta">caricamento…</div>
   </div>
-  <div class="row-btns"><button class="icon-btn" id="btn-alerts" title="Avvisi" aria-label="Avvisi">🔔</button><button class="icon-btn" id="btn-pf" title="Portafoglio" aria-label="Portafoglio">💼</button><button class="icon-btn" id="btn-diag" title="Diagnostica dati" aria-label="Diagnostica">ⓘ</button>
+  <div class="row-btns"><button class="icon-btn" id="btn-alerts" title="Avvisi" aria-label="Avvisi">🔔</button><button class="icon-btn" id="btn-pf" title="Portafoglio" aria-label="Portafoglio">💼</button><button class="icon-btn" id="btn-ladder" title="Costruisci una scala di scadenze" aria-label="Scala">🪜</button><button class="icon-btn" id="btn-diag" title="Diagnostica dati" aria-label="Diagnostica">ⓘ</button>
   <button class="icon-btn" id="btn-settings" title="Impostazioni" aria-label="Impostazioni">⚙</button></div>
 </header>
 
@@ -30,6 +30,7 @@
       <button class="chip" data-cat="gov_fx">Stati esteri</button>
       <button class="chip" data-cat="supra">Sovranazionali</button>
       <button class="chip" data-cat="other">Corporate e altri</button>
+      <button class="chip" data-cat="fav">★ Preferiti</button>
     </div>
     <details class="more">
       <summary>Filtri avanzati <span id="filter-count"></span></summary>
@@ -70,10 +71,12 @@
   <section class="results">
     <div class="results-head">
       <span id="count"></span>
+      <span class="head-tools"><button type="button" class="link" id="btn-csv" title="Scarica la lista filtrata in CSV (Excel)">⬇ CSV</button> <button type="button" class="link" id="btn-share" title="Copia un link con i filtri attuali">🔗 Condividi filtri</button></span>
       <label>Ordina <select id="sort">
         <option value="ytm_net_all:desc">Rendimento netto ↓</option>
         <option value="coupon_net_yield:desc">Cedola netta (flusso annuo) ↓</option>
         <option value="price_yield:desc">Guadagno da prezzo ↓</option>
+        <option value="spread_btp:desc">Spread vs BTP ↓</option>
         <option value="spread_bund:desc">Spread vs Bund ↓</option>
         <option value="liq:desc">Liquidità ↓</option>
         <option value="years:asc">Scadenza ↑</option>
@@ -115,6 +118,14 @@
   <div class="sheet wide">
     <div class="sheet-head"><h2>Portafoglio</h2><button class="icon-btn" data-close aria-label="Chiudi">✕</button></div>
     <div class="sheet-body" id="pf-body"></div>
+  </div>
+</div>
+
+<!-- Scala -->
+<div class="modal hidden" id="ladder" role="dialog" aria-modal="true">
+  <div class="sheet wide">
+    <div class="sheet-head"><h2>Scala di scadenze</h2><button class="icon-btn" data-close aria-label="Chiudi">✕</button></div>
+    <div class="sheet-body" id="ladder-body"></div>
   </div>
 </div>
 
@@ -183,11 +194,15 @@
         <button class="btn" id="s-save">Salva</button>
         <button class="btn ghost" id="s-reset">Ripristina default</button>
       </div>
+      <div id="gh-settings"></div>
       <h3>Come leggere i numeri</h3>
       <ul class="hint">
         <li><b>Rendimento netto annuo</b> (il numero grande): tasso annuo composto che eguaglia l'esborso (prezzo + rateo netto + commissioni) ai flussi netti (cedole tassate, rimborso al netto della tassa sulla plusvalenza, bollo). Confronta correttamente titoli con scadenze diverse.</li>
         <li><b>Di cui da cedola / da prezzo</b>: la parte del rendimento che incassi ogni anno con le cedole nette (cedola netta ÷ prezzo) e la parte che arriva solo a scadenza dal rimborso a 100. Stesso rendimento, due esperienze diverse: flusso in tasca oppure guadagno rinviato (e tassa rinviata).</li>
-        <li><b>vs Bund</b>: differenza di rendimento lordo rispetto a un titolo di Stato tedesco della stessa scadenza (curva ricavata dai Bund quotati sul MOT). È il "premio" che il mercato chiede per il rischio dell'emittente; per i titoli in valuta include anche il rischio cambio.</li>
+        <li><b>vs BTP / vs Bund</b>: differenza di rendimento lordo rispetto a un BTP o a un Bund della stessa scadenza (curve ricavate dai titoli quotati, interpolate). È il "premio" che il mercato chiede per il rischio dell'emittente rispetto all'Italia o alla Germania; per i titoli in valuta include anche il rischio cambio.</li>
+        <li><b>Totale a scadenza</b> (in piccolo sotto il netto annuo): guadagno netto complessivo diviso l'esborso, non annualizzato. Sotto l'anno è il numero da guardare.</li>
+        <li><b>Rischio tasso</b> (in scheda): la duration modificata dice di quanto scende il prezzo se i rendimenti salgono di 1 punto. Conta solo se vendi prima della scadenza.</li>
+        <li><b>★ Preferiti</b>: la stella sulle schede salva il titolo nella sezione Preferiti (su questo dispositivo). <b>🪜 Scala</b>: costruisce un portafoglio a scadenze scaglionate dalla lista filtrata.</li>
         <li>Nella scheda trovi anche YTM lordo, YTM netto solo tasse e netto semplice, utili per confrontare con altri siti.</li>
         <li><b>YTM lordo</b>: come pubblicato da Borsa Italiana.</li>
         <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione (è quello che pagheresti); <span class="badge ref">rif</span> = prezzo di riferimento dell'ultima seduta (nessuna proposta in vendita); <span class="badge stale">fermo</span> = riferimento di un titolo mai scambiato nell'anno: prezzo vecchio, rendimento non realistico. I titoli "fermi" e gli "incerti" (prezzo non aggiornato o verifica con Borsa Italiana non superata) e gli strip sono nascosti di default: si riattivano nei filtri avanzati.</li>
@@ -199,7 +214,9 @@
 
 <script src="yields.js"></script>
 <script src="app.js"></script>
+<script src="sim.js"></script>
 <script src="portfolio.js"></script>
 <script src="alerts.js"></script>
+<script src="sync.js"></script>
 </body>
 </html>
