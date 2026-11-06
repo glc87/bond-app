@@ -1,8 +1,8 @@
-/* app.js — v0.11.3 — Bond Netto (PWA) */
+/* app.js — v0.11.4 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.3";
+  const APP_VERSION = "0.11.4";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -732,6 +732,7 @@
       // default: solo EUR. I rendimenti in TRY/BRL/MXN sono "veri" nella loro valuta ma privi di senso in euro
       // (la valuta si svaluta quanto rende): finché manca la conversione in EUR, le altre valute vanno scelte apposta.
       for (const name of Object.keys(FACETS)) renderFacetButton(name);
+      $("#app-ver").textContent = `App ${APP_VERSION} ·`;
       applyHash();   // filtri da link condiviso (sovrascrivono i default)
       updateFavChip();
       const runAt = new Date(d.meta.run_at);
