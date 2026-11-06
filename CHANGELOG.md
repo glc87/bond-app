@@ -184,3 +184,9 @@
   CoE, Bobl a 1,33% netto con spread −0,86; "rendimento" 2,76% a +0,80.
 - yields v0.3.7 (+ app): richiamabili con "call" attaccato al nome ("Apr30call", "Gn32subcall": 10 titoli EuroTLX) non
   erano riconosciuti e finivano in scala come fissi; ora regex call(?![a-z]); la scala li esclude anche sui dati di oggi.
+- sim.js v0.3.1: scala multivaluta: con più valute nei filtri ogni gradino va nella sua valuta, nominale calcolato al cambio
+  BCE (meta.fx), esborso/flussi/media pesata in euro, avviso sul rischio cambio. Esempio EUR+USD 50.000 €/5 anni: 5 gradini USD
+  (IADB, Romania, Treasury, World Bank, Mediobanca) 3,89% netto in USD, esborso 46.648 €.
+- app 0.11.10 / app.css 0.2.11: badge a tre livelli: grigio neutro = informazione (valuta, strip, EuroTLX, lotto, rif),
+  ambra = attenzione (sopra 100, call, poco liquido), rosso = problema (fermo, incerto, lotto istituzionale), verde = ask.
+  Nota rischio tasso colorata per livello (verde/blu/ambra/rosso). Legenda nella guida ⓘ.

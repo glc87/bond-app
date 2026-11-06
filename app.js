@@ -1,8 +1,8 @@
-/* app.js — v0.11.9 — Bond Netto (PWA) */
+/* app.js — v0.11.10 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.9";
+  const APP_VERSION = "0.11.10";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -268,7 +268,7 @@
     return `<div class="card ${sel ? "sel" : ""}" data-isin="${b.isin}">
       <label class="cmp" title="Aggiungi al confronto"><input type="checkbox" data-cmp="${b.isin}" ${sel ? "checked" : ""}></label>
       <div class="c-name"><div class="name">${favBtn(b.isin)}${esc(b.name)} ${minus}</div>
-        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span class="${b.min_lot >= INST_LOT ? "badge warn" : ""}" title="${b.min_lot >= INST_LOT ? "taglio istituzionale" : "lotto minimo"}">lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
+        <div class="meta"><span>${esc(b.isin)}</span><span>${CAT_LABEL[b._cat]}</span><span>${esc(b.country)}</span>${b.market === "ETLX" ? '<span class="badge cur" title="quotato su EuroTLX">EuroTLX</span>' : ""}${(b.markets || []).length > 1 ? '<span class="badge cur" title="quotato sia sul MOT sia su EuroTLX">MOT+TLX</span>' : ""}${b.min_lot && b.min_lot > 1000 ? `<span class="${b.min_lot >= INST_LOT ? "badge bad" : "badge info"}" title="${b.min_lot >= INST_LOT ? "taglio istituzionale: non acquistabile dal piccolo risparmiatore" : "lotto minimo"}">lotto ${fmtCur(b.min_lot, b.currency)}</span>` : ""}</div></div>
       <div class="c-mat"><span class="lbl">Scad.</span>${fmtDate(b.maturity)} <span class="small">(${b._years != null ? fmtNum(b._years, 1) : "–"} a.)</span></div>
       <div class="c-cpn"><span class="lbl">Cedola</span>${cpn}</div>
       <div class="c-price"><span class="lbl">Prezzo</span>${fmtNum(b._price, 2)} ${priceBadge(b)} <span class="badge cur">${esc(b.currency)}</span>${c && c.accrued_net > 0 ? `<div class="small">tel quel ${fmtNum(b._price + c.accrued_net, 2)} <span title="prezzo + rateo netto: quello che paghi">(+${fmtNum(c.accrued_net, 3)} rateo)</span></div>` : ""}</div>
@@ -456,8 +456,8 @@
   function rateRiskHTML(b, c, nominal) {
     if (c.mod_duration == null) return "";
     const d = c.mod_duration, tq = (b._price + c.accrued_gross) / 100 * nominal;
-    const lvl = d < 2 ? "basso" : d < 5 ? "medio" : d < 9 ? "alto" : "molto alto";
-    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): se il rendimento che il mercato chiede per questo titolo sale di 1 punto (per tassi più alti, inflazione attesa in aumento o emittente giudicato più rischioso), il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
+    const li = d < 2 ? 0 : d < 5 ? 1 : d < 9 ? 2 : 3, lvl = ["basso", "medio", "alto", "molto alto"][li];
+    return `<div class="note risk r${li}"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): se il rendimento che il mercato chiede per questo titolo sale di 1 punto (per tassi più alti, inflazione attesa in aumento o emittente giudicato più rischioso), il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
       (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); se scende di 1 punto, sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100 e le cedole non cambiano.</div>`;
   }
 

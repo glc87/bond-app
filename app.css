@@ -1,4 +1,4 @@
-/* app.css — v0.2.10 */
+/* app.css — v0.2.11 */
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6475; --line: #e3e6eb;
   --accent: #0b5fff; --accent-ink: #ffffff; --accent-soft: #e8f0ff; --good: #0a7d3e; --warn: #b45309; --bad: #b91c1c;
@@ -149,12 +149,20 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .chart { min-height: 60px; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+/* Badge a tre livelli (06/11/2026): info = grigio neutro (valuta, strip, mercato, lotto, "rif");
+   attenzione = ambra (sopra 100, call, poco liquido); problema = rosso (fermo, incerto, lotto istituzionale). "ask" = verde. */
 .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; font-weight: 600; vertical-align: middle; }
 .badge.ask { background: var(--ask); color: var(--ask-ink); }
-.badge.ref { background: var(--ref); color: var(--ref-ink); }
-.badge.stale { background: #fee2e2; color: #991b1b; }
-.badge.cur { background: var(--line); color: var(--ink); }
+.badge.ref, .badge.cur, .badge.info { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
 .badge.warn { background: var(--ref); color: var(--ref-ink); }
+.badge.stale, .badge.bad { background: #fee2e2; color: #991b1b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.stale, :root:not([data-theme="light"]) .badge.bad { background: #7f1d1d; color: #fecaca; } }
+:root[data-theme="dark"] .badge.stale, :root[data-theme="dark"] .badge.bad { background: #7f1d1d; color: #fecaca; }
+/* nota rischio tasso: colore per livello */
+.note.risk.r0 { border-left-color: var(--good); } .note.risk.r1 { border-left-color: var(--accent); } .note.risk.r2 { border-left-color: var(--warn); }
+.note.risk.r3 { border-left-color: var(--bad); background: #fee2e2; color: #7f1d1d; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .note.risk.r3 { background: #3b0f0f; color: #fecaca; } }
+:root[data-theme="dark"] .note.risk.r3 { background: #3b0f0f; color: #fecaca; }
 .more-btn { margin: 14px auto 0; display: block; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
 
 footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
