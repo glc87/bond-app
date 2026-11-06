@@ -1,8 +1,8 @@
-/* app.js — v0.10.0 — Bond Netto (PWA) */
+/* app.js — v0.10.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.10.0";
+  const APP_VERSION = "0.10.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -110,9 +110,9 @@
     const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked, showInst = $("#f-inst").checked;
     let n = 0;
     state.filtered = state.bonds.filter(b => {
-      if (state.cat === "fav") { if (!state.favs.has(b.isin)) return false; }
-      else if (state.cat !== "all" && b._cat !== state.cat) return false;
       if (q && !(`${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(q))) return false;
+      if (state.cat === "fav") return state.favs.has(b.isin);   // nei preferiti vale solo la ricerca: vedi tutto ciò che hai scelto
+      if (state.cat !== "all" && b._cat !== state.cat) return false;
       if (cur && b.currency !== cur) return false;
       if (market && !(b.markets || [b.market]).includes(market)) return false;
       if (country && b.country !== country) return false;
@@ -125,11 +125,9 @@
       if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
       if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
       if (onlyAsk && b.price.source !== "ask") return false;
-      if (state.cat !== "fav") {   // nei preferiti si vede tutto ciò che hai scelto, anche se incerto/istituzionale/strip
-        if (!showUncertain && b._uncertain) return false;
-        if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
-        if (!showStrips && b._strip) return false;
-      }
+      if (!showUncertain && b._uncertain) return false;
+      if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
+      if (!showStrips && b._strip) return false;
       if (noMinus && b._price > 100) return false;
       return true;
     });
@@ -153,7 +151,7 @@
     if (noMinus) add("f-nominus", "Sopra la pari", "esclusi", () => { $("#f-nominus").checked = false; });
     n = active.length;
     $("#filter-count").textContent = n ? `· ${n} ${n === 1 ? "attivo" : "attivi"}` : "";
-    $("#filter-live").textContent = `${state.filtered.length} titoli corrispondono` + (n ? ` (${n} ${n === 1 ? "filtro attivo" : "filtri attivi"})` : " (filtri di default)");
+    $("#filter-live").textContent = state.cat === "fav" ? `${state.filtered.length} preferiti (qui i filtri non si applicano, solo la ricerca)` : `${state.filtered.length} titoli corrispondono` + (n ? ` (${n} ${n === 1 ? "filtro attivo" : "filtri attivi"})` : " (filtri di default)");
     $$(".grid input, .grid select, .grid label.check").forEach(el => el.classList.remove("set"));
     active.forEach(a => { const el = $("#" + a.id); el.classList.add("set"); if (el.type === "checkbox") el.closest("label").classList.add("set"); });
     state.activeFilters = active;

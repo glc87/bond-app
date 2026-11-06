@@ -105,3 +105,13 @@
   la Issue → email) viene prodotto solo se almeno un titolo soddisfa una regola oggi e non ieri; i nuovi sono marcati NUOVO,
   gli altri stanno in un blocco richiudibile. Verificato sui dati del 05/11: nessun giorno precedente → email; stessi 35
   titoli → nessuna email; 2 nuovi → email con i 2 in testa. Primo run con alerts.json: 06/11 16:07 (prima email: tutti nuovi).
+- Revisione a freddo del codice del 06/11 (app 0.10.1, sim 0.1.1, sync 0.1.1):
+  * sync: base64 a blocchi (String.fromCharCode(...array) esplodeva lo stack oltre ~100k byte: testato con 200 posizioni,
+    28 kB cifrati); il backup del portafoglio ora confronta il contenuto DECIFRATO con quello sul repo (salt/iv casuali
+    rendevano ogni cifrato diverso → un commit a ogni tocco anche senza modifiche: ora "già aggiornato", 1 solo PUT);
+    fetch con cache: no-store (l'API poteva restituire lo sha vecchio dalla cache del browser).
+  * preferiti: si applica solo la ricerca, non i filtri (un preferito sotto l'anno o in valuta spariva per il filtro di default);
+    il contatore del pannello lo dice.
+  * simulatore: default a metà vita; nota per zero coupon (pro rata tassato come interesse, eccedenza al 26%: stima lieve-
+    mente ottimista) e richiamabili; scala: cedole nette/anno = cedola annua netta sul nominale (prima era un rapporto
+    approssimato sui titoli brevi); dichiarati i criteri di esclusione (richiamabili, lotti ≥100k).

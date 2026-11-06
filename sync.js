@@ -1,4 +1,4 @@
-/* sync.js — v0.1.0 — Bond Netto: sincronizzazione con il repository GitHub (avvisi e portafoglio) senza copia-incolla.
+/* sync.js — v0.1.1 — Bond Netto: sincronizzazione con il repository GitHub (avvisi e portafoglio) senza copia-incolla.
    - Token "fine-grained" personale, limitato al solo repository, permesso Contents: lettura e scrittura. Resta su questo dispositivo.
    - alerts.json va in chiaro (il job giornaliero deve leggerlo). Il portafoglio e' cifrato (AES-GCM, chiave da passphrase con
      PBKDF2) perche' il repository e' pubblico: senza passphrase il file user/portfolio.enc non dice nulla. */
@@ -15,12 +15,14 @@
   async function gh(path, opts = {}) {
     const c = cfg();
     const r = await fetch(`https://api.github.com/repos/${c.repo}/contents/${path}`, {
-      ...opts, headers: { Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
+      cache: "no-store", ...opts, headers: { Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
     if (r.status === 404) return null;
     if (!r.ok) { let msg = `HTTP ${r.status}`; try { msg += ": " + (await r.json()).message; } catch {} throw new Error(msg); }
     return r.json();
   }
-  const b64enc = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+  // base64 a blocchi: String.fromCharCode(...array) esplode lo stack oltre ~100k byte
+  const bytesToB64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); };
+  const b64enc = s => bytesToB64(new TextEncoder().encode(s));
   const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), ch => ch.charCodeAt(0)));
   async function getFile(path) { const j = await gh(path + "?ref=main"); return j ? { sha: j.sha, text: b64dec(j.content) } : null; }
   async function putFile(path, text, message) {
@@ -42,7 +44,7 @@
     const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
     const key = await deriveKey(pass, salt);
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(text)));
-    return JSON.stringify({ v: 1, kdf: "PBKDF2-SHA256-200000", salt: hex(salt), iv: hex(iv), data: btoa(String.fromCharCode(...ct)) });
+    return JSON.stringify({ v: 1, kdf: "PBKDF2-SHA256-200000", salt: hex(salt), iv: hex(iv), data: bytesToB64(ct) });
   }
   async function decrypt(blob, pass) {
     const j = JSON.parse(blob); const key = await deriveKey(pass, unhex(j.salt));
@@ -55,8 +57,12 @@
     const text = JSON.stringify(rules, null, 1) + "\n";
     return putFile("alerts.json", text, "Avvisi aggiornati dall'app");
   }
+  const canon = d => JSON.stringify({ positions: d.positions || [], minus: d.minus || [], sales: d.sales || [] });   // senza data di esportazione
   async function savePortfolio(data) {
     const c = cfg(); if (!c.pass) throw new Error("Imposta una passphrase nelle Impostazioni (serve per cifrare il portafoglio).");
+    // il cifrato cambia a ogni chiamata (salt e iv casuali): per evitare commit inutili confronto il contenuto decifrato
+    const cur = await getFile("user/portfolio.enc");
+    if (cur) { try { if (canon(JSON.parse(await decrypt(cur.text.trim(), c.pass))) === canon(data)) return { unchanged: true }; } catch {} }
     return putFile("user/portfolio.enc", await encrypt(JSON.stringify(data), c.pass) + "\n", "Backup portafoglio (cifrato) dall'app");
   }
   async function loadPortfolio() {

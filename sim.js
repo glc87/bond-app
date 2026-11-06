@@ -1,4 +1,4 @@
-/* sim.js — v0.1.0 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
+/* sim.js — v0.1.1 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
 (() => {
   "use strict";
   const A = window.BondApp, Y = window.Yields;
@@ -55,14 +55,14 @@
       <tr><td>Bollo (${fmtNum(hold, 1)} anni)</td><td>−${fmtCur(r.bollo, b.currency)}</td></tr>
       ${r.minus > 0 ? `<tr><td>Minusvalenza generata (credito fiscale, non conteggiata)</td><td class="ko">${fmtCur(r.minus, b.currency)}</td></tr>` : ""}
     </table>
-    <p class="hint">A scadenza il rendimento netto annuo sarebbe ${fmtPct(r.c0.ytm_net_all)}. Vendere prima costa una seconda commissione e, se compri sotto 100, rinuncia a parte del guadagno da prezzo; con un rialzo dei tassi il prezzo di vendita scende (duration ${fmtNum(r.c0.mod_duration, 1)}).</p>`;
+    <p class="hint">A scadenza il rendimento netto annuo sarebbe ${fmtPct(r.c0.ytm_net_all)}. Vendere prima costa una seconda commissione e, se compri sotto 100, rinuncia a parte del guadagno da prezzo; con un rialzo dei tassi il prezzo di vendita scende (duration ${fmtNum(r.c0.mod_duration, 1)}).${b.kind === "zero" ? " Zero coupon: la parte di guadagno maturata pro rata è tassata come interesse, l'eventuale eccedenza al 26%: qui è tutto all'aliquota del titolo (stima leggermente ottimista per i titoli di Stato)." : ""}${b.kind === "callable" ? " Titolo richiamabile: se viene rimborsato prima, lo scenario non si applica." : ""}</p>`;
   }
 
   function mountSim(b, nominal) {
     const host = $("#d-sim"); if (!host || !b._calc) return;
     const maxH = Math.max(0.5, Math.floor(b._calc.years_to_maturity * 2) / 2 - 0.5);
     if (maxH < 0.5) { host.innerHTML = ""; return; }
-    const h0 = Math.min(maxH, Math.max(0.5, Math.round(b._calc.years_to_maturity / 2 * 2) / 2));
+    const h0 = Math.min(maxH, Math.max(0.5, Math.round(b._calc.years_to_maturity) / 2));   // default: a metà vita
     host.innerHTML = `<h3>Se vendo prima della scadenza</h3>
       <div class="sim-ctl"><label>Dopo <output id="sim-h">${fmtNum(h0, 1)}</output> anni <input id="sim-hold" type="range" min="0.5" max="${maxH}" step="0.5" value="${h0}"></label>
       <label>Scenario tassi <select id="sim-shift"><option value="0">invariati</option><option value="1">+1 punto (prezzi giù)</option><option value="-1">−1 punto (prezzi su)</option><option value="2">+2 punti</option></select></label></div>
@@ -95,7 +95,7 @@
   }
 
   function ladderHTML(res, opts) {
-    const rows = res.rungs.map(r => r.bond ? `<tr><td>${fmtNum(r.lo, 1)}–${fmtNum(r.hi, 1)} anni</td><td><span class="lnk" data-isin="${r.bond.isin}">${esc(r.bond.name)}</span><br><span class="small">${r.bond.isin} · scad. ${fmtDate(r.bond.maturity)} · ${A.priceBadge(r.bond)} ${fmtNum(r.bond._price)}</span></td><td>${fmtCur(r.nominal, "EUR")}<br><span class="small">esborso ${fmtCur(r.c.cost_total_eur, "EUR")}</span></td><td><b>${fmtPct(r.c.ytm_net_all)}</b><br><span class="small">cedole nette ${fmtCur(r.c.coupons_net_total_eur / Math.max(r.c.years_to_maturity, 0.01), "EUR")}/anno</span></td></tr>`
+    const rows = res.rungs.map(r => r.bond ? `<tr><td>${fmtNum(r.lo, 1)}–${fmtNum(r.hi, 1)} anni</td><td><span class="lnk" data-isin="${r.bond.isin}">${esc(r.bond.name)}</span><br><span class="small">${r.bond.isin} · scad. ${fmtDate(r.bond.maturity)} · ${A.priceBadge(r.bond)} ${fmtNum(r.bond._price)}</span></td><td>${fmtCur(r.nominal, "EUR")}<br><span class="small">esborso ${fmtCur(r.c.cost_total_eur, "EUR")}</span></td><td><b>${fmtPct(r.c.ytm_net_all)}</b><br><span class="small">cedole nette ${fmtCur((r.bond.kind === "zero" ? 0 : (r.bond.coupon_annual || 0)) * (1 - r.c.tax_rate) / 100 * r.nominal, "EUR")}/anno</span></td></tr>`
       : `<tr><td>${fmtNum(r.lo, 1)}–${fmtNum(r.hi, 1)} anni</td><td colspan="3" class="hint">nessun titolo adatto tra quelli filtrati (o importo per gradino sotto il lotto minimo)</td></tr>`).join("");
     const ok = res.rungs.filter(r => r.bond);
     const wAvg = ok.length ? ok.reduce((s, r) => s + r.c.ytm_net_all * r.c.cost_total_eur, 0) / ok.reduce((s, r) => s + r.c.cost_total_eur, 0) : null;
@@ -111,7 +111,7 @@
       <div class="kpis"><div class="kpi"><div class="l">Esborso totale</div><div class="v">${fmtCur(res.used, "EUR")}</div></div><div class="kpi"><div class="l">Rendimento netto medio (pesato)</div><div class="v good">${fmtPct(wAvg)}</div></div></div>
       ${cal}
       <div class="row"><button class="btn" id="ld-fav" ${ok.length ? "" : "disabled"}>★ Salva nei preferiti</button><button class="btn ghost" id="ld-pf" ${ok.length ? "" : "disabled"}>+ Aggiungi al portafoglio</button></div>
-      <p class="hint">Per ogni gradino sceglie il miglior rendimento netto tra i titoli <b>in EUR della lista filtrata</b> (con prezzo affidabile, non incerti, non strip), con nominale arrotondato al lotto minimo e, quando possibile, un emittente diverso per gradino. Non è un consiglio: controlla emittente e rischio di ogni titolo nella scheda. Nessun reinvestimento ipotizzato: quando un gradino scade, decidi tu dove reinvestire.</p>`;
+      <p class="hint">Per ogni gradino sceglie il miglior rendimento netto tra i titoli <b>in EUR della lista filtrata</b> (con prezzo affidabile, non incerti, non strip, non richiamabili, lotto sotto 100.000), con nominale arrotondato al lotto minimo e, quando possibile, un emittente diverso per gradino. Non è un consiglio: controlla emittente e rischio di ogni titolo nella scheda. Nessun reinvestimento ipotizzato: quando un gradino scade, decidi tu dove reinvestire.</p>`;
   }
 
   function openLadder() {
