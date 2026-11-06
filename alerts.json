@@ -1,1 +1,13 @@
-[]
+[
+ {
+  "metric": "ytm_net_all",
+  "op": ">=",
+  "value": 3.5,
+  "isin": null,
+  "cat": null,
+  "currency": "EUR",
+  "ymin": 5,
+  "ymax": 10,
+  "label": null
+ }
+]
