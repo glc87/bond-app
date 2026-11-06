@@ -101,3 +101,7 @@
   "Salva alerts.json su GitHub" dagli Avvisi (il job apre la Issue → email), backup del portafoglio CIFRATO (AES-GCM 256,
   chiave PBKDF2-SHA256 200k iterazioni da passphrase) in user/portfolio.enc e ripristino da altro dispositivo. Testato con
   API simulata: token errato, sha/aggiornamento, "già aggiornato", round-trip cifra/decifra, passphrase errata.
+- run_daily v0.7.3: avvisi "solo novità". alerts_fired.json conserva anche gli scattati del giorno prima; il report (e quindi
+  la Issue → email) viene prodotto solo se almeno un titolo soddisfa una regola oggi e non ieri; i nuovi sono marcati NUOVO,
+  gli altri stanno in un blocco richiudibile. Verificato sui dati del 05/11: nessun giorno precedente → email; stessi 35
+  titoli → nessuna email; 2 nuovi → email con i 2 in testa. Primo run con alerts.json: 06/11 16:07 (prima email: tutti nuovi).

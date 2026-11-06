@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.2
+run_daily.py — v0.7.3
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -366,18 +366,49 @@ def evaluate_alerts(rules: list, records: list) -> list:
     return out
 
 
-def alerts_report(fired: list, trade_date: date) -> str:
-    lines = [f"Avvisi scattati con i dati del {trade_date.isoformat()} (https://glc87.github.io/bond-app/)", ""]
+def rule_key(r: dict) -> str:
+    """Identita' stabile di una regola (senza id): per confrontare gli scattati di oggi con quelli di ieri."""
+    return json.dumps({k: r.get(k) for k in ("metric", "op", "value", "isin", "cat", "currency", "ymin", "ymax")}, sort_keys=True)
+
+
+def alerts_report(fired: list, trade_date: date, previous: Optional[dict] = None) -> str:
+    """Report per la Issue. Con `previous` (alerts_fired.json del giorno prima) evidenzia i titoli NUOVI (oggi si', ieri no)
+    e ritorna "" se non c'e' nessuna novita': cosi' l'email arriva solo quando cambia qualcosa, non ogni giorno
+    (06/11/2026: la prima regola scattava su 35 titoli, identici un giorno dopo l'altro)."""
+    prev = {}
+    for f in (previous or {}).get("fired", []):
+        prev[rule_key(f["rule"])] = set(f.get("isins", []))
+    has_prev = previous is not None
+    new_total = 0
+    lines = [f"Avvisi con i dati del {trade_date.isoformat()} (https://glc87.github.io/bond-app/)", ""]
     for r, hits in fired:
+        before = prev.get(rule_key(r))
+        new = [b for b in hits if before is None or b["isin"] not in before]
+        gone = sorted(before - {b["isin"] for b in hits}) if before else []
+        new_total += len(new) if has_prev else 0
         scope = f"ISIN {r['isin']}" if r.get("isin") else f"{r.get('cat') or 'tutte le categorie'}, {r.get('currency') or 'EUR'}, {r.get('ymin') or 0}-{r.get('ymax') or '∞'} anni"
         unit = "" if r.get("metric") == "price" else "%"
         lines.append(f"### {r.get('metric','ytm_net_all')} {r.get('op','>=')} {r['value']}{unit} · {scope}" + (f" · {r['label']}" if r.get("label") else ""))
-        for b in sorted(hits, key=lambda b: -((b.get("calc") or {}).get("ytm_net_all") or 0))[:25]:
+        lines.append(f"{len(hits)} titoli" + (f", **{len(new)} nuovi** rispetto a ieri" if has_prev and before is not None else "") + (f", {len(gone)} usciti" if gone else ""))
+        def line(b, tag=""):
             c = b.get("calc") or {}
-            lines.append(f"- {b['name']} ({b['isin']}): prezzo {b['price']['used']} [{b['price']['source']}], YTM netto all-in {((c.get('ytm_net_all') or 0)*100):.2f}%, scad. {b['maturity']}")
-        if len(hits) > 25:
-            lines.append(f"- … e altri {len(hits) - 25}")
+            return f"- {tag}{b['name']} ({b['isin']}): prezzo {b['price']['used']} [{b['price']['source']}], YTM netto all-in {((c.get('ytm_net_all') or 0)*100):.2f}%, scad. {b['maturity']}"
+        bykey = lambda b: -((b.get("calc") or {}).get("ytm_net_all") or 0)
+        for b in sorted(new, key=bykey)[:25]:
+            lines.append(line(b, "**NUOVO** " if has_prev and before is not None else ""))
+        rest = [b for b in hits if b not in new]
+        if rest:
+            lines.append(f"<details><summary>già segnalati ({len(rest)})</summary>")
+            lines.append("")
+            for b in sorted(rest, key=bykey)[:40]:
+                lines.append(line(b))
+            if len(rest) > 40:
+                lines.append(f"- … e altri {len(rest) - 40}")
+            lines.append("")
+            lines.append("</details>")
         lines.append("")
+    if has_prev and new_total == 0:
+        return ""
     return "\n".join(lines)
 
 
@@ -492,9 +523,21 @@ def main(argv=None):
         try:
             rules = json.loads(alerts_file.read_text(encoding="utf-8"))
             fired = evaluate_alerts(rules, records)
-            (out / "alerts_fired.json").write_text(json.dumps({"trade_date": trade_date.isoformat(), "fired": [{"rule": r, "isins": [b["isin"] for b in h]} for r, h in fired]}, ensure_ascii=False), encoding="utf-8")
-            (out / "alerts_report.md").write_text(alerts_report(fired, trade_date) if fired else "", encoding="utf-8")
-            log.info("Avvisi: %d regole, %d scattate", len(rules), len(fired))
+            previous = None
+            try:
+                pf = out / "alerts_fired.json"
+                if pf.exists():
+                    previous = json.loads(pf.read_text(encoding="utf-8"))
+                    if previous.get("trade_date") == trade_date.isoformat():   # secondo run dello stesso giorno: confronta col giorno prima
+                        previous = previous.get("previous") or previous
+            except Exception as e:
+                log.warning("alerts_fired.json precedente illeggibile: %s", e); previous = None
+            today_fired = {"trade_date": trade_date.isoformat(), "fired": [{"rule": r, "isins": [b["isin"] for b in h]} for r, h in fired]}
+            if previous: today_fired["previous"] = {"trade_date": previous.get("trade_date"), "fired": previous.get("fired", [])}
+            (out / "alerts_fired.json").write_text(json.dumps(today_fired, ensure_ascii=False), encoding="utf-8")
+            report = alerts_report(fired, trade_date, previous) if fired else ""
+            (out / "alerts_report.md").write_text(report, encoding="utf-8")
+            log.info("Avvisi: %d regole, %d scattate, email: %s", len(rules), len(fired), "sì (novità)" if report else "no")
         except Exception as e:
             log.warning("alerts.json non valido: %s", e)
     log.info("Fatto: %d titoli, %d calcolabili, %d falliti, %d richieste in %.0fs",
