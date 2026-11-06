@@ -51,7 +51,7 @@
         <label>Cedola netta min % (flusso annuo) <input id="f-cmin" type="number" step="0.1" placeholder="es. 2,5"></label>
         <label>Lotto minimo max € <input id="f-lot" type="number" step="1000" placeholder="es. 1000"></label>
         <label class="check"><input id="f-inst" type="checkbox"> Mostra lotti istituzionali (taglio minimo da 100.000 in su: non acquistabili dal piccolo risparmiatore)</label>
-        <label class="check"><input id="f-uncertain" type="checkbox"> Mostra titoli incerti (prezzo fermo o non aggiornato, verifica con Borsa Italiana non superata)</label>
+        <label class="check"><input id="f-uncertain" type="checkbox"> Mostra titoli incerti (prezzo fermo o non aggiornato, verifica incrociata non superata)</label>
         <label class="check"><input id="f-strips" type="checkbox"> Mostra strip (cedole/mantelli di titoli di Stato smontati)</label>
         <label class="check"><input id="f-ask" type="checkbox"> Solo con prezzo ask reale</label>
         <label class="check"><input id="f-nominus" type="checkbox"> Escludi sopra la pari (minusvalenza)</label>
@@ -93,7 +93,7 @@
   </section>
 
   <footer>
-    <p>Prezzi: Borsa Italiana (MOT), ritardo 15'. Rendimenti netti calcolati per un investitore privato residente in Italia
+    <p>Prezzi dei mercati MOT ed EuroTLX, ritardo 15'. Rendimenti netti calcolati per un investitore privato residente in Italia
       (12,5% titoli di Stato e sovranazionali, 26% altri), tasse su cedole, rateo e plusvalenza; commissioni e bollo secondo le impostazioni.
       Dati indicativi, non costituiscono consulenza. <a href="https://github.com/glc87/bond-app" target="_blank" rel="noopener">Codice e metodo</a>.</p>
   </footer>
@@ -204,8 +204,8 @@
         <li><b>Rischio tasso</b> (in scheda): la duration modificata dice di quanto scende il prezzo se i rendimenti salgono di 1 punto. Conta solo se vendi prima della scadenza.</li>
         <li><b>★ Preferiti</b>: la stella sulle schede salva il titolo nella sezione Preferiti (su questo dispositivo). <b>🪜 Scala</b>: costruisce un portafoglio a scadenze scaglionate dalla lista filtrata.</li>
         <li>Nella scheda trovi anche YTM lordo, YTM netto solo tasse e netto semplice, utili per confrontare con altri siti.</li>
-        <li><b>YTM lordo</b>: come pubblicato da Borsa Italiana.</li>
-        <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione (è quello che pagheresti); <span class="badge ref">rif</span> = prezzo di riferimento dell'ultima seduta (nessuna proposta in vendita); <span class="badge stale">fermo</span> = riferimento di un titolo mai scambiato nell'anno: prezzo vecchio, rendimento non realistico. I titoli "fermi" e gli "incerti" (prezzo non aggiornato o verifica con Borsa Italiana non superata) e gli strip sono nascosti di default: si riattivano nei filtri avanzati.</li>
+        <li><b>YTM lordo</b>: come pubblicato dal mercato.</li>
+        <li><b>Prezzo</b>: <span class="badge ask">ask</span> = miglior prezzo in vendita nel book al momento della rilevazione (è quello che pagheresti); <span class="badge ref">rif</span> = prezzo di riferimento dell'ultima seduta (nessuna proposta in vendita); <span class="badge stale">fermo</span> = riferimento di un titolo mai scambiato nell'anno: prezzo vecchio, rendimento non realistico. I titoli "fermi" e gli "incerti" (prezzo non aggiornato o verifica incrociata non superata) e gli strip sono nascosti di default: si riattivano nei filtri avanzati.</li>
         <li><b>Sopra 100</b>: a scadenza si genera una minusvalenza (credito fiscale, 4 anni): non è conteggiata nel rendimento ma viene indicata.</li>
       </ul>
     </div>

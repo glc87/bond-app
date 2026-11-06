@@ -1,6 +1,6 @@
 # Bond App — rendimenti netti delle obbligazioni quotate sul MOT
 
-Fotografia giornaliera di tutti i titoli quotati sul MOT e su EuroTLX (Borsa Italiana)
+Fotografia giornaliera di tutti i titoli quotati sul MOT e su EuroTLX
 (titoli di Stato italiani ed esteri, sovranazionali, corporate) con prezzo,
 valuta e **rendimento netto** per un investitore privato italiano.
 
@@ -15,18 +15,18 @@ valuta e **rendimento netto** per un investitore privato italiano.
 - Prezzo sopra 100: la minusvalenza viene segnalata, non conteggiata.
 - Commissioni (default 0,19%, min 5 €, max 19 €: percentuale vincolata tra minimo e massimo) e bollo 0,2% annuo inclusi nei dati "all-in".
 - Rendimento calcolato sul prezzo **ask** quando disponibile, altrimenti sul riferimento.
-- Verifica incrociata automatica con i rendimenti pubblicati da Borsa Italiana
+- Verifica incrociata automatica con i rendimenti pubblicati dal mercato
   (che, nota: nel "netto" non tassano la plusvalenza).
 
 ## Esecuzione manuale
 Actions → "Aggiornamento giornaliero bond" → Run workflow (opzionale `limit`, `segments`).
 
 ## Disclaimer
-Dati indicativi a solo scopo informativo, non costituiscono consulenza. Fonte prezzi: Borsa Italiana (ritardo 15').
+Dati indicativi a solo scopo informativo, non costituiscono consulenza. Prezzi dei mercati MOT ed EuroTLX (ritardo 15'). Uso personale.
 
 
 ## Funzioni aggiunte il 06/11/2026
-- **Spread vs BTP** e vs Bund (curve interpolate dai titoli quotati), **rischio tasso** (duration modificata, stessa formula di Borsa Italiana).
+- **Spread vs BTP** e vs Bund (curve interpolate dai titoli quotati), **rischio tasso** (duration modificata, stessa formula del mercato).
 - **★ Preferiti**, **⬇ CSV** della lista filtrata, **🔗 link condivisibile** (filtri nell'URL).
 - **Se vendo prima**: simulatore in scheda (anni di detenzione, scenario tassi) con tasse, seconda commissione e bollo pro rata.
 - **🪜 Scala di scadenze**: portafoglio a gradini dalla lista filtrata, emittenti diversi, lotti minimi, flussi per anno.

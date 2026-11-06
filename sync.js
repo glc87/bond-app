@@ -1,4 +1,4 @@
-/* sync.js — v0.1.1 — Bond Netto: sincronizzazione con il repository GitHub (avvisi e portafoglio) senza copia-incolla.
+/* sync.js — v0.1.2 — Bond Netto: sincronizzazione con il repository GitHub (avvisi e portafoglio) senza copia-incolla.
    - Token "fine-grained" personale, limitato al solo repository, permesso Contents: lettura e scrittura. Resta su questo dispositivo.
    - alerts.json va in chiaro (il job giornaliero deve leggerlo). Il portafoglio e' cifrato (AES-GCM, chiave da passphrase con
      PBKDF2) perche' il repository e' pubblico: senza passphrase il file user/portfolio.enc non dice nulla. */
@@ -70,6 +70,15 @@
     const f = await getFile("user/portfolio.enc"); if (!f) throw new Error("Nessun backup sul repository.");
     try { return JSON.parse(await decrypt(f.text.trim(), c.pass)); } catch { throw new Error("Passphrase errata o file danneggiato."); }
   }
+  // Lancia il job di aggiornamento (repository_dispatch: basta il permesso Contents del token). Il job salta se i dati di oggi esistono già.
+  async function runNow() {
+    const c = cfg();
+    const r = await fetch(`https://api.github.com/repos/${c.repo}/dispatches`, { method: "POST", cache: "no-store",
+      headers: { Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      body: JSON.stringify({ event_type: "run-daily", client_payload: { from: "app", at: new Date().toISOString() } }) });
+    if (r.status !== 204) { let msg = `HTTP ${r.status}`; try { msg += ": " + (await r.json()).message; } catch {} throw new Error(msg); }
+    return true;
+  }
   async function test() {
     const c = cfg(); const r = await fetch(`https://api.github.com/repos/${c.repo}`, { headers: { Authorization: `Bearer ${c.token}`, Accept: "application/vnd.github+json" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}: token o repository non validi`);
@@ -89,7 +98,8 @@
         <label>Token (github_pat_…) <input id="gh-token" type="password" value="${esc(c.token || "")}" autocomplete="off"></label>
         <label>Passphrase per cifrare il portafoglio <input id="gh-pass" type="password" value="${esc(c.pass || "")}" autocomplete="off"></label>
       </div>
-      <div class="row"><button type="button" class="btn ghost" id="gh-save">Salva</button><button type="button" class="btn ghost" id="gh-test">Prova collegamento</button><span id="gh-msg" class="hint"></span></div>`;
+      <div class="row"><button type="button" class="btn ghost" id="gh-save">Salva</button><button type="button" class="btn ghost" id="gh-test">Prova collegamento</button><span id="gh-msg" class="hint"></span></div>
+      ${c.token ? `<div class="row"><button type="button" class="btn ghost" id="gh-run">▶ Aggiorna i dati ora</button><span id="gh-run-msg" class="hint">Lancia il job (circa 70 minuti). Utile se alle 17:30 i dati sono ancora di ieri: GitHub a volte salta l'orario programmato. Se i dati di oggi ci sono già, il job non fa nulla.</span></div>` : ""}`;
   }
   function mountSettings() {
     const host = $("#gh-settings"); if (!host) return;
@@ -98,6 +108,12 @@
     $("#gh-test").addEventListener("click", async () => { saveCfg({ repo: $("#gh-repo").value.trim() || DEFAULT_REPO, token: $("#gh-token").value.trim(), pass: $("#gh-pass").value }); $("#gh-msg").textContent = "…"; try { $("#gh-msg").textContent = await test(); } catch (e) { $("#gh-msg").textContent = "errore: " + e.message; } });
   }
   $("#btn-settings").addEventListener("click", mountSettings);
+  document.addEventListener("click", async e => {
+    const r = e.target.closest("#gh-run"); if (!r) return;
+    r.disabled = true; r.textContent = "…";
+    try { await runNow(); r.textContent = "✓ avviato: dati tra ~70 minuti"; $("#gh-run-msg").textContent = "Puoi chiudere l'app: al prossimo avvio troverai i dati nuovi (controlla la data in alto)."; }
+    catch (err) { r.textContent = "errore: " + err.message; r.disabled = false; }
+  });
 
   // pulsanti nelle finestre Avvisi e Portafoglio (inseriti da alerts.js / portfolio.js tramite BondSync.buttons)
   function alertsButton() { return ready() ? `<button type="button" class="btn primary" id="gh-alerts">☁ Salva alerts.json su GitHub</button>` : `<span class="hint">Per salvarlo da qui senza copia-incolla: configura il token GitHub nelle Impostazioni ⚙.</span>`; }
@@ -112,5 +128,5 @@
     if (l) { if (!confirm("Sostituire il portafoglio su questo dispositivo con il backup su GitHub?")) return; l.textContent = "…"; try { BondPortfolio.importData(await loadPortfolio()); } catch (err) { flash(l, "errore: " + err.message, false); } return; }
   });
 
-  window.BondSync = { ready, cfg, saveAlerts, savePortfolio, loadPortfolio, encrypt, decrypt, alertsButton, portfolioButtons, test, VERSION: "0.1.0" };
+  window.BondSync = { ready, cfg, saveAlerts, savePortfolio, loadPortfolio, encrypt, decrypt, alertsButton, portfolioButtons, test, runNow, VERSION: "0.1.2" };
 })();

@@ -122,3 +122,9 @@
   pulsanti disabilitati), 15 gradini su 30 anni, CSV di lista vuota, scenario −3 punti. Corretti (app 0.10.2, sim 0.1.2):
   il simulatore compariva anche sotto l'anno (guardia mai attiva); la scala dimensionava su "lotto minimo 1" di BI
   (491 titoli MOT, es. Austria: comprabili a 1 €) → ora taglio minimo 1.000 per i gradini.
+- 06/11/2026 sera: i due cron (15:07 e 16:37 UTC) NON sono partiti (nessun evento "schedule" da ieri sera; il
+  deploy Pages delle 09:38 UTC risulta "queued" da ore: stato incoerente di GitHub, già visto). Rimedi:
+  * workflow: terzo cron 18:23 UTC e trigger repository_dispatch (tipo "run-daily"), con lo stesso salto se i dati di oggi
+    esistono già; sync.js 0.1.2: pulsante "▶ Aggiorna i dati ora" nelle Impostazioni (basta il permesso Contents del token).
+  * app 0.10.3: tolta l'attribuzione esplicita della fonte da footer, guida, scheda e README ("prezzi dei mercati MOT ed
+    EuroTLX"); i link alla scheda ufficiale del titolo restano.

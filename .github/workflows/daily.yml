@@ -7,6 +7,10 @@ on:
     # Il secondo tentativo viene saltato se i dati di oggi esistono già (step "Già aggiornato oggi?").
     - cron: "7 15 * * 1-5"
     - cron: "37 16 * * 1-5"
+    # 06/11/2026: nessuno dei due cron è partito. Terzo tentativo serale; in più l'app può lanciare il job (repository_dispatch).
+    - cron: "23 18 * * 1-5"
+  repository_dispatch:
+    types: [run-daily]
   workflow_dispatch:
     inputs:
       limit:
@@ -49,7 +53,7 @@ jobs:
         run: |
           TODAY=$(date -u +%Y-%m-%d)
           DONE=$(python -c "import json;m=json.load(open('data/meta.json'));print('yes' if m.get('trade_date')=='$TODAY' and m.get('n_total',0)>1000 else 'no')" 2>/dev/null || echo no)
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$DONE" = "yes" ]; then echo "skip=true" >> $GITHUB_OUTPUT; echo "Dati di oggi già presenti: salto."; else echo "skip=false" >> $GITHUB_OUTPUT; fi
+          if { [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; } && [ "$DONE" = "yes" ]; then echo "skip=true" >> $GITHUB_OUTPUT; echo "Dati di oggi già presenti: salto."; else echo "skip=false" >> $GITHUB_OUTPUT; fi
 
       - name: Test offline ed end-to-end (server finto)
         if: steps.today.outputs.skip != 'true'

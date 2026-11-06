@@ -1,8 +1,8 @@
-/* app.js — v0.10.2 — Bond Netto (PWA) */
+/* app.js — v0.10.3 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.10.2";
+  const APP_VERSION = "0.10.3";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -200,8 +200,8 @@
     if (q === "stale") return "prezzo fermo: nessuna proposta in vendita e nessuno scambio nell'anno";
     if (q === "quiet") return "nessuna proposta in vendita e nessuno scambio oggi: prezzo di riferimento forse non aggiornato";
     const ck = b.check || {};
-    if (ck.ytm_gross_vs_bi != null && Math.abs(ck.ytm_gross_vs_bi) > 0.25 && b._years > 0.5) return `rendimento lordo scostato di ${fmtNum(ck.ytm_gross_vs_bi)} punti da quello di Borsa Italiana`;
-    if (ck.tax_rate_confirmed === false) return "aliquota fiscale non confermata dai dati di Borsa Italiana";
+    if (ck.ytm_gross_vs_bi != null && Math.abs(ck.ytm_gross_vs_bi) > 0.25 && b._years > 0.5) return `rendimento lordo scostato di ${fmtNum(ck.ytm_gross_vs_bi)} punti da quello pubblicato dal mercato`;
+    if (ck.tax_rate_confirmed === false) return "aliquota fiscale non confermata dai dati di mercato";
     if ((b.anomalies || []).some(a => a.startsWith("cedola scheda"))) return "cedola della scheda non coerente con il nome del titolo";
     return null;
   }
@@ -341,7 +341,7 @@
       ["Lotto minimo", fmtCur(b.min_lot, b.currency)], ["Aliquota fiscale applicata", `${fmtNum(taxOf(b) * 100, 1)}% (${esc(b.tax_reason)}${Math.abs(taxOf(b) - b.tax_rate) > 1e-9 ? "; regime personalizzato nelle Impostazioni" : ""})`],
       ["Emesso", b.outstanding ? fmtCur(b.outstanding, b.currency) : "–"], ["Subordinato", b.subordinated || "–"], ["Segmento", b.segment],
     ];
-    const biRows = bi.yield_gross != null ? `<h3>Dati Borsa Italiana (prezzo di riferimento)</h3><table class="kv">
+    const biRows = bi.yield_gross != null ? `<h3>Dati pubblicati dal mercato (prezzo di riferimento)</h3><table class="kv">
       <tr><td>YTM lordo BI / nostro sullo stesso prezzo</td><td>${fmtNum(bi.yield_gross)} / ${ck.ytm_gross_vs_bi != null ? fmtNum(bi.yield_gross + ck.ytm_gross_vs_bi) : "–"} <span class="${Math.abs(ck.ytm_gross_vs_bi || 0) < 0.05 ? "ok" : "ko"}">●</span></td></tr>
       <tr><td>YTM netto BI (non tassa la plusvalenza)</td><td>${fmtNum(bi.yield_net)}</td></tr>
       <tr><td>Rateo lordo BI</td><td>${fmtNum(bi.accrued_gross, 5)}</td></tr>
@@ -355,7 +355,7 @@
       <div id="d-calc">${calcHTML(b, nominal)}</div>` : `<div class="note">Rendimento non calcolato: ${esc(b.not_computable_reason)}</div>`;
     const addBtn = b._calc ? `<div class="row"><button class="btn ghost" data-pf-add="${b.isin}">+ Aggiungi al portafoglio</button></div>` : "";
     return `${anomalies}${calc}${addBtn}<div id="d-sim"></div><h3>Storico</h3><div id="d-chart" class="chart"><span class="hint">caricamento…</span></div><h3>Dati titolo</h3><table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>${biRows}
-      <p class="hint" style="margin-top:12px"><a href="${esc(b.scheda_url)}" target="_blank" rel="noopener">Scheda su Borsa Italiana ↗</a></p>`;
+      <p class="hint" style="margin-top:12px"><a href="${esc(b.scheda_url)}" target="_blank" rel="noopener">Scheda ufficiale del titolo ↗</a></p>`;
   }
 
   function calcHTML(b, nominal) {
@@ -385,7 +385,7 @@
       <tr><td>Imposta di bollo stimata (totale)</td><td>−${fmtCur(c.bollo_total_eur, b.currency)}</td></tr>
       <tr><td><b>Guadagno netto</b></td><td><b>${fmtCur(c.net_gain_total_eur, b.currency)}</b></td></tr></table>
     <h3>Altre misure (per confronto con altri siti)</h3><table class="kv">
-      <tr><td>YTM lordo (come Borsa Italiana)</td><td>${fmtPct(c.ytm_gross)}</td></tr>
+      <tr><td>YTM lordo (come pubblicato dal mercato)</td><td>${fmtPct(c.ytm_gross)}</td></tr>
       <tr><td>Spread vs BTP di pari scadenza (lordo)${b.currency !== "EUR" ? " — in valuta, include il rischio cambio" : ""}</td><td>${b._calc && b._calc.spread_btp != null ? (b._calc.spread_btp >= 0 ? "+" : "") + fmtPct(b._calc.spread_btp) : "–"}</td></tr>
       <tr><td>Spread vs Bund di pari scadenza (lordo)${b.currency !== "EUR" ? " — in valuta, include il rischio cambio" : ""}</td><td>${b._calc && b._calc.spread_bund != null ? (b._calc.spread_bund >= 0 ? "+" : "") + fmtPct(b._calc.spread_bund) : "–"}</td></tr>
       <tr><td>YTM netto solo tasse (senza commissioni e bollo; tassa anche la plusvalenza, a differenza di BI)</td><td>${fmtPct(c.ytm_net_tax)}</td></tr>
@@ -469,7 +469,7 @@
       ${row("Con ask (prezzo di vendita reale)", pct(q.ask || (m.price_source || {}).ask || 0, m.n_total))}
       ${row("Riferimento, scambiato oggi", q.traded ?? "–")}${row("Riferimento, non scambiato oggi", q.quiet ?? "–")}${row("Fermo (mai scambiato nell'anno)", q.stale ?? "–")}
       </table>
-      <h3>Verifica incrociata con Borsa Italiana</h3><table class="kv">
+      <h3>Verifica incrociata con i dati di mercato</h3><table class="kv">
       ${row("Titoli confrontabili (scadenza > 6 mesi)", dev.length)}
       ${row("YTM lordo entro 0,02 punti", pct(within(0.02), dev.length))}${row("entro 0,05", pct(within(0.05), dev.length))}${row("oltre 0,25 (esclusi come incerti)", dev.length - within(0.25))}
       ${row("Aliquota confermata / non discriminante / contraddetta", `${taxc(true)} / ${taxc(null)} / ${taxc(false)}`)}
