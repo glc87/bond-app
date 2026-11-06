@@ -166,3 +166,10 @@
   cronologia (transizione scheda→portafoglio gestita: nessuna chiusura indesiderata). Verificato in headless: 7 scenari.
   BUG corretto: dalla 0.10.4 la regola CSS .sub (nowrap) dell'intestazione valeva anche nella scheda e spingeva la ✕
   fuori dallo schermo sul telefono (x=521 su 400 px): ora la regola è limitata all'intestazione.
+- sim.js v0.2.0 / app 0.11.6 / app.css 0.2.9: scala con tre universi: "Lista di default" (filtri azzerati), "Lista filtrata
+  attuale" (con il numero di ammissibili), "Scegli i filtri qui sotto" (categoria, paese, mercato, richiamabili, netto minimo,
+  con conteggi per voce). Per gradino spread vs Bund; riepilogo "rischio emittente medio". Chiarito in nota: sceglie il
+  miglior rendimento netto per gradino nell'universo scelto, un emittente diverso per gradino quando possibile.
+- BUG (app + run_daily 0.7.6): la categoria "Sovranazionali" era vuota (0 titoli in lista e nei chip) perché il MOT
+  elenca BEI, EFSF, UE, World Bank… sotto "Titoli di stato esteri" e il controllo sulla tipologia veniva prima di quello
+  sull'emittente sovranazionale. Ora: 610 sovranazionali (164 ammissibili per la scala in EUR), 1.137 Stati esteri.

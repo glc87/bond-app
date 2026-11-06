@@ -1,8 +1,8 @@
-/* app.js — v0.11.5 — Bond Netto (PWA) */
+/* app.js — v0.11.6 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.5";
+  const APP_VERSION = "0.11.6";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -47,9 +47,9 @@
 
   function category(b) {   // stessa logica di run_daily.category_of
     const t = (b.tipologia || "").toLowerCase(), r = b.tax_reason || "";
+    if (r.includes("sovranazionale")) return "supra";   // prima dei "titoli di stato esteri": il MOT elenca lì anche BEI, EFSF, World Bank… (fix 06/11/2026: la categoria era vuota)
     if (t === "titoli di stato italiani" || (r.startsWith("titolo di Stato") && b.country === "IT")) return "gov_it";
     if (t === "titoli di stato esteri" || r.startsWith("titolo di Stato") || r.startsWith("classificato titolo di Stato")) return "gov_fx";
-    if (r.includes("sovranazionale")) return "supra";
     return "other";
   }
   const CAT_LABEL = { gov_it: "Stato Italia", gov_fx: "Stato estero", supra: "Sovranazionale", other: "Corporate/altro" };
@@ -746,7 +746,7 @@
       $("#meta").textContent = "Dati non disponibili: " + e.message;
     }
   }
-  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail, toggleFav, reliable, quality };
+  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail, toggleFav, reliable, quality, CAT_LABEL, COUNTRY_NAME };
   load();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

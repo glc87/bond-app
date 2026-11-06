@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.5
+run_daily.py — v0.7.6
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.5"
+VERSION = "0.7.6"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -348,9 +348,9 @@ except Exception as _e:   # senza tabella i titoli restano semplicemente non cal
 
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()
     t = (rec.get("tipologia") or "").lower(); r = rec.get("tax_reason") or ""
+    if "sovranazionale" in r: return "supra"   # prima: il MOT elenca BEI/EFSF/World Bank sotto "Titoli di stato esteri" (fix 06/11/2026)
     if t == "titoli di stato italiani" or (r.startswith("titolo di Stato") and rec.get("country") == "IT"): return "gov_it"
     if t == "titoli di stato esteri" or r.startswith("titolo di Stato") or r.startswith("classificato titolo di Stato"): return "gov_fx"
-    if "sovranazionale" in r: return "supra"
     return "other"
 
 
