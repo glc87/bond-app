@@ -1,8 +1,8 @@
-/* app.js — v0.10.4 — Bond Netto (PWA) */
+/* app.js — v0.11.0 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.10.4";
+  const APP_VERSION = "0.11.0";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -103,43 +103,91 @@
     }
   }
 
+  // ---------------- filtri a selezione multipla con conteggi (valuta, paese, mercato) ----------------
+  // Ogni voce mostra quanti titoli resterebbero scegliendola, dati tutti gli ALTRI filtri attivi (conteggi "sfaccettati").
+  const COUNTRY_NAME = { IT: "Italia", DE: "Germania", FR: "Francia", ES: "Spagna", AT: "Austria", BE: "Belgio", NL: "Paesi Bassi", PT: "Portogallo", IE: "Irlanda", FI: "Finlandia", GR: "Grecia", RO: "Romania", PL: "Polonia", HU: "Ungheria",
+    US: "Stati Uniti", GB: "Regno Unito", XS: "internazionale", EU: "Unione Europea", LU: "Lussemburgo", BR: "Brasile", MX: "Messico", TR: "Turchia", ZA: "Sudafrica", AR: "Argentina", CL: "Cile", PE: "Perù", CO: "Colombia", EG: "Egitto",
+    CH: "Svizzera", SE: "Svezia", DK: "Danimarca", NO: "Norvegia", CA: "Canada", AU: "Australia", JP: "Giappone", KR: "Corea del Sud", CN: "Cina", IN: "India", ID: "Indonesia", PH: "Filippine", SA: "Arabia Saudita", QA: "Qatar", AE: "Emirati",
+    IL: "Israele", MA: "Marocco", NG: "Nigeria", UY: "Uruguay", PA: "Panama", DO: "Rep. Dominicana", CR: "Costa Rica", SK: "Slovacchia", SI: "Slovenia", HR: "Croazia", CZ: "Rep. Ceca", BG: "Bulgaria", LT: "Lituania", LV: "Lettonia",
+    EE: "Estonia", CY: "Cipro", MT: "Malta", IS: "Islanda", KZ: "Kazakistan", RS: "Serbia", MK: "Macedonia del Nord", UA: "Ucraina", KY: "Cayman", BM: "Bermuda", JE: "Jersey", VG: "Isole Vergini", NZ: "Nuova Zelanda", HK: "Hong Kong", SG: "Singapore" };
+  const FACETS = {
+    cur: { el: "#f-cur", key: b => b.currency, label: v => v, def: new Set(["EUR"]) },
+    country: { el: "#f-country", key: b => b.country, label: v => COUNTRY_NAME[v] ? `${v} · ${COUNTRY_NAME[v]}` : v, def: new Set() },
+    market: { el: "#f-market", key: b => b.markets || [b.market], label: v => v === "ETLX" ? "EuroTLX" : v, def: new Set() },
+  };
+  const facetSel = { cur: new Set(["EUR"]), country: new Set(), market: new Set() };
+  const facetMatch = (name, b) => { const sel = facetSel[name]; if (!sel.size) return true; const k = FACETS[name].key(b); return Array.isArray(k) ? k.some(x => sel.has(x)) : sel.has(k); };
+  const facetText = name => { const f = FACETS[name], sel = [...facetSel[name]]; return sel.length ? sel.map(v => name === "market" ? f.label(v) : v).join(", ") : $(f.el).dataset.all; };
+  function renderFacetButton(name) { const btn = $(FACETS[name].el + " .facet-btn"); btn.textContent = facetText(name); btn.classList.toggle("set", !setEq(facetSel[name], FACETS[name].def)); }
+  const setEq = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
+  function renderFacetPop(name) {
+    const f = FACETS[name], pop = $(f.el + " .facet-pop"); if (pop.classList.contains("hidden")) return;
+    // conteggi: titoli che passano tutti gli altri filtri, per ogni valore di questo
+    const counts = {}; for (const b of state.bonds) { if (!passes(b, name)) continue; const k = f.key(b); for (const v of (Array.isArray(k) ? k : [k])) if (v) counts[v] = (counts[v] || 0) + 1; }
+    const vals = [...new Set(state.bonds.flatMap(b => { const k = f.key(b); return Array.isArray(k) ? k : [k]; }).filter(Boolean))];
+    vals.sort((a, b) => (counts[b] || 0) - (counts[a] || 0) || a.localeCompare(b));
+    const total = state.bonds.filter(b => passes(b, name)).length;
+    pop.innerHTML = `<div class="facet-head"><span class="hint">scelta multipla · numero di titoli con gli altri filtri</span><button type="button" class="facet-close">✓ Fatto</button></div>
+      <label class="facet-row all"><input type="checkbox" ${facetSel[name].size ? "" : "checked"} data-fv=""> <span>${esc($(f.el).dataset.all)}</span><b>${total}</b></label>` +
+      vals.map(v => `<label class="facet-row ${counts[v] ? "" : "zero"}"><input type="checkbox" ${facetSel[name].has(v) ? "checked" : ""} data-fv="${esc(v)}"> <span>${esc(f.label(v))}</span><b>${counts[v] || 0}</b></label>`).join("");
+  }
+  function closeFacets(except) { for (const name of Object.keys(FACETS)) if (name !== except) $(FACETS[name].el + " .facet-pop").classList.add("hidden"); }
+  document.addEventListener("click", e => {
+    const fb = e.target.closest(".facet-btn");
+    if (fb) { const wrap = fb.closest(".facet"); const name = Object.keys(FACETS).find(n => $(FACETS[n].el) === wrap); const pop = wrap.querySelector(".facet-pop"); closeFacets(name); pop.classList.toggle("hidden"); renderFacetPop(name); e.preventDefault(); return; }
+    if (e.target.closest(".facet-close")) { closeFacets(); e.preventDefault(); return; }
+    const cb = e.target.closest(".facet-row input");
+    if (cb) {
+      const wrap = cb.closest(".facet"); const name = Object.keys(FACETS).find(n => $(FACETS[n].el) === wrap); const v = cb.dataset.fv;
+      if (v === "") facetSel[name].clear(); else if (cb.checked) facetSel[name].add(v); else facetSel[name].delete(v);
+      renderFacetButton(name); applyFilters(); renderFacetPop(name); e.stopPropagation(); return;
+    }
+    if (!e.target.closest(".facet")) closeFacets();
+  });
+  // "label" che avvolge il facet: evita che il click sulla label riapra/chiuda il popover
+  document.addEventListener("click", e => { if (e.target.closest("label") && e.target.closest("label").querySelector(".facet") && !e.target.closest(".facet")) e.preventDefault(); }, true);
+
+  // Predicato dei filtri; `skip` esclude un facet (per i suoi conteggi). Le variabili lette dai campi sono in `cur`.
+  let cur = {};
+  function readFilterInputs() {
+    cur = { q: $("#q").value.trim().toLowerCase(), kind: $("#f-kind").value,
+      ymin: parseFloat($("#f-ymin").value), ymax: parseFloat($("#f-ymax").value), nmin: parseFloat($("#f-nmin").value), lot: parseFloat($("#f-lot").value), cmin: parseFloat($("#f-cmin").value),
+      onlyAsk: $("#f-ask").checked, noMinus: $("#f-nominus").checked, showUncertain: $("#f-uncertain").checked, showStrips: $("#f-strips").checked, showInst: $("#f-inst").checked };
+  }
+  function passes(b, skip) {
+    const { q, kind, ymin, ymax, nmin, lot, cmin, onlyAsk, noMinus, showUncertain, showStrips, showInst } = cur;
+    if (q && !(`${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(q))) return false;
+    if (state.cat === "fav") return state.favs.has(b.isin);   // nei preferiti vale solo la ricerca: vedi tutto ciò che hai scelto
+    if (state.cat !== "all" && b._cat !== state.cat) return false;
+    for (const name of Object.keys(FACETS)) if (name !== skip && !facetMatch(name, b)) return false;
+    if (kind === "computable" && !b._calc) return false;
+    if (kind === "nocall" && !(b._calc && b.kind !== "callable")) return false;
+    if ((kind === "fixed" || kind === "zero") && !(b._calc && b.kind === kind)) return false;
+    if (!isNaN(ymin) && b._years != null && b._years < ymin) return false;
+    if (!isNaN(ymax) && b._years != null && b._years > ymax) return false;
+    if (!isNaN(nmin) && !(b._calc && b._calc.ytm_net_all != null && b._calc.ytm_net_all * 100 >= nmin)) return false;
+    if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
+    if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
+    if (onlyAsk && b.price.source !== "ask") return false;
+    if (noMinus && b._price > 100) return false;
+    if (!showUncertain && b._uncertain) return false;
+    if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
+    if (!showStrips && b._strip) return false;
+    return true;
+  }
+
   function applyFilters() {
-    const q = $("#q").value.trim().toLowerCase();
-    const cur = $("#f-cur").value, country = $("#f-country").value, kind = $("#f-kind").value, market = $("#f-market").value;
-    const ymin = parseFloat($("#f-ymin").value), ymax = parseFloat($("#f-ymax").value), nmin = parseFloat($("#f-nmin").value), lot = parseFloat($("#f-lot").value), cmin = parseFloat($("#f-cmin").value);
-    const onlyAsk = $("#f-ask").checked, noMinus = $("#f-nominus").checked, showUncertain = $("#f-uncertain").checked, showStrips = $("#f-strips").checked, showInst = $("#f-inst").checked;
+    readFilterInputs();
+    const { q, kind, ymin, ymax, nmin, lot, cmin, onlyAsk, noMinus, showUncertain, showStrips, showInst } = cur;
     let n = 0;
-    state.filtered = state.bonds.filter(b => {
-      if (q && !(`${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(q))) return false;
-      if (state.cat === "fav") return state.favs.has(b.isin);   // nei preferiti vale solo la ricerca: vedi tutto ciò che hai scelto
-      if (state.cat !== "all" && b._cat !== state.cat) return false;
-      if (cur && b.currency !== cur) return false;
-      if (market && !(b.markets || [b.market]).includes(market)) return false;
-      if (country && b.country !== country) return false;
-      if (kind === "computable" && !b._calc) return false;
-      if (kind === "nocall" && !(b._calc && b.kind !== "callable")) return false;
-      if ((kind === "fixed" || kind === "zero") && !(b._calc && b.kind === kind)) return false;
-      if (!isNaN(ymin) && b._years != null && b._years < ymin) return false;
-      if (!isNaN(ymax) && b._years != null && b._years > ymax) return false;
-      if (!isNaN(nmin) && !(b._calc && b._calc.ytm_net_all != null && b._calc.ytm_net_all * 100 >= nmin)) return false;
-      if (!isNaN(lot) && b.min_lot != null && b.min_lot > lot) return false;
-      if (!isNaN(cmin) && !(b._calc && b._calc.coupon_net_yield != null && b._calc.coupon_net_yield * 100 >= cmin)) return false;
-      if (onlyAsk && b.price.source !== "ask") return false;
-      if (!showUncertain && b._uncertain) return false;
-      if (!showInst && b.min_lot != null && b.min_lot >= INST_LOT) return false;   // lotti istituzionali nascosti di default
-      if (!showStrips && b._strip) return false;
-      if (noMinus && b._price > 100) return false;
-      return true;
-    });
+    state.filtered = state.bonds.filter(b => passes(b, null));
     // Filtri attivi (diversi dal default): chip rimovibili sotto il pannello, campi evidenziati, conteggio live nel pannello.
     const kindLabel = { nocall: "senza richiamabili", fixed: "solo tasso fisso", zero: "solo zero coupon", all: "anche non calcolabili" };
     const active = [];
     const add = (id, label, value, reset) => { active.push({ id, label, value, reset }); };
-    if (cur !== "EUR") add("f-cur", "Valuta", cur || "tutte", () => { $("#f-cur").value = "EUR"; });
-    if (country) add("f-country", "Paese", country, () => { $("#f-country").value = ""; });
-    if (market) add("f-market", "Mercato", market === "ETLX" ? "EuroTLX" : market, () => { $("#f-market").value = ""; });
+    for (const name of Object.keys(FACETS)) if (!setEq(facetSel[name], FACETS[name].def)) add(FACETS[name].el.slice(1), { cur: "Valuta", country: "Paese", market: "Mercato" }[name], facetText(name), () => { facetSel[name] = new Set(FACETS[name].def); renderFacetButton(name); });
     if (kind !== "computable") add("f-kind", "Tipo", kindLabel[kind] || kind, () => { $("#f-kind").value = "computable"; });
-    if (!isNaN(ymin) && ymin !== 1) add("f-ymin", "Scadenza min", `${fmtNum(ymin, 1)} anni`, () => { $("#f-ymin").value = "1"; });
+    if (!isNaN(ymin) && ymin !== 0) add("f-ymin", "Scadenza min", `${fmtNum(ymin, 1)} anni`, () => { $("#f-ymin").value = "0"; });
     if (!isNaN(ymax)) add("f-ymax", "Scadenza max", `${fmtNum(ymax, 1)} anni`, () => { $("#f-ymax").value = ""; });
     if (!isNaN(nmin)) add("f-nmin", "Netto min", `${fmtNum(nmin)}%`, () => { $("#f-nmin").value = ""; });
     if (!isNaN(cmin)) add("f-cmin", "Cedola netta min", `${fmtNum(cmin)}%`, () => { $("#f-cmin").value = ""; });
@@ -153,7 +201,8 @@
     $("#filter-count").textContent = n ? `· ${n} ${n === 1 ? "attivo" : "attivi"}` : "";
     $("#filter-live").textContent = state.cat === "fav" ? `${state.filtered.length} preferiti (qui i filtri non si applicano, solo la ricerca)` : `${state.filtered.length} titoli corrispondono` + (n ? ` (${n} ${n === 1 ? "filtro attivo" : "filtri attivi"})` : " (filtri di default)");
     $$(".grid input, .grid select, .grid label.check").forEach(el => el.classList.remove("set"));
-    active.forEach(a => { const el = $("#" + a.id); el.classList.add("set"); if (el.type === "checkbox") el.closest("label").classList.add("set"); });
+    active.forEach(a => { const el = $("#" + a.id); if (el.classList.contains("facet")) return; el.classList.add("set"); if (el.type === "checkbox") el.closest("label").classList.add("set"); });
+    for (const name of Object.keys(FACETS)) renderFacetPop(name);   // conteggi aggiornati se un popover è aperto
     state.activeFilters = active;
     $("#active-filters").innerHTML = active.map((a, i) => `<button type="button" class="chip" data-af="${i}" title="togli questo filtro">${esc(a.label)}<b>${esc(a.value)}</b> ×</button>`).join("")
       + (active.length > 1 ? `<button type="button" class="chip" data-af="all" title="torna ai filtri di default">Azzera tutti ×</button>` : "");
@@ -538,7 +587,7 @@
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
     $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
-  ["#q", "#f-cur", "#f-country", "#f-market", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
+  ["#q", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
   function resetFilters() { (state.activeFilters || []).forEach(a => a.reset()); applyFilters(); }
   $("#filter-reset").addEventListener("click", resetFilters);
   $("#filter-close").addEventListener("click", () => { $("details.more").removeAttribute("open"); window.scrollTo({ top: 0, behavior: "smooth" }); });
@@ -569,13 +618,14 @@
   $("#btn-csv").addEventListener("click", exportCSV);
 
   // ---------------- filtri nell'URL (link condivisibile) ----------------
-  const HASH_FIELDS = { q: "#q", cur: "#f-cur", country: "#f-country", market: "#f-market", kind: "#f-kind", ymin: "#f-ymin", ymax: "#f-ymax", nmin: "#f-nmin", cmin: "#f-cmin", lot: "#f-lot",
+  const HASH_FIELDS = { q: "#q", kind: "#f-kind", ymin: "#f-ymin", ymax: "#f-ymax", nmin: "#f-nmin", cmin: "#f-cmin", lot: "#f-lot",
     inst: "#f-inst", unc: "#f-uncertain", strips: "#f-strips", ask: "#f-ask", nominus: "#f-nominus", sort: "#sort" };
-  const HASH_DEFAULT = { cur: "EUR", kind: "computable", ymin: "1", sort: "ytm_net_all:desc" };
+  const HASH_DEFAULT = { kind: "computable", ymin: "0", sort: "ytm_net_all:desc" };
   function syncHash() {
     const u = new URLSearchParams();
     for (const [k, sel] of Object.entries(HASH_FIELDS)) { const el = $(sel); const v = el.type === "checkbox" ? (el.checked ? "1" : "") : el.value; if (v && v !== (HASH_DEFAULT[k] ?? "")) u.set(k, v); }
     if (state.cat !== "all") u.set("cat", state.cat);
+    for (const name of Object.keys(FACETS)) if (!setEq(facetSel[name], FACETS[name].def)) u.set(name, [...facetSel[name]].join(","));
     const h = u.toString(); history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
   }
   function applyHash() {
@@ -586,6 +636,7 @@
       if (el.type === "checkbox") el.checked = v === "1"; else if (el.tagName === "SELECT") { if ([...el.options].some(o => o.value === v)) el.value = v; }
       else if (el.type === "number") { if (v !== "" && isFinite(parseFloat(v))) el.value = v; } else el.value = v;   // numeri non validi nel link: resta il default
     }
+    for (const name of Object.keys(FACETS)) { const v = u.get(name); if (v == null) continue; any = true; facetSel[name] = new Set(v.split(",").filter(Boolean)); renderFacetButton(name); }
     const cat = u.get("cat"); if (cat && $(`[data-cat="${cat}"]`)) { state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); any = true; }
     return any;
   }
@@ -605,12 +656,9 @@
       const d = await r.json();
       state.meta = d.meta; state.bonds = d.bonds;
       recompute();
-      const opts = (sel, vals) => { const s = $(sel); vals.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; s.appendChild(o); }); };
-      opts("#f-cur", [...new Set(state.bonds.map(b => b.currency).filter(Boolean))].sort());
-      opts("#f-country", [...new Set(state.bonds.map(b => b.country).filter(Boolean))].sort());
       // default: solo EUR. I rendimenti in TRY/BRL/MXN sono "veri" nella loro valuta ma privi di senso in euro
       // (la valuta si svaluta quanto rende): finché manca la conversione in EUR, le altre valute vanno scelte apposta.
-      if ([...$("#f-cur").options].some(o => o.value === "EUR")) $("#f-cur").value = "EUR";
+      for (const name of Object.keys(FACETS)) renderFacetButton(name);
       applyHash();   // filtri da link condiviso (sovrascrivono i default)
       updateFavChip();
       const runAt = new Date(d.meta.run_at);

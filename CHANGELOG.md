@@ -139,3 +139,9 @@
 - app v0.10.4 / app.css v0.2.6: intestazione a griglia: titolo e 5 pulsanti sulla prima riga, sottotitolo breve sotto
   ("3673 titoli · 06/11/2026 19:05 · 2775 calcolati", dettagli nel tooltip). Sul telefono l'altezza passa da ~600 a 74 px.
   Su desktop (>700 px) resta su una riga.
+- app v0.11.0 / app.css v0.2.7: scadenza minima di default 0 anni (era 1). Valuta, Paese e Mercato diventano filtri a
+  scelta multipla (es. EUR+USD, IT+ES) con il numero di titoli accanto a ogni voce, calcolato con tutti gli altri filtri
+  attivi e aggiornato a ogni modifica; voci a zero in grigio; pulsante "✓ Fatto"; nomi dei paesi; link condivisibile con
+  cur=EUR,USD&country=IT,ES. Il predicato dei filtri è ora un'unica funzione passes(b, skip) usata sia per la lista
+  sia per i conteggi. Verificato: 0-1 anno → Tutte 161 / EUR 94 / USD 28; IT+ES → 37; conteggi valuta coerenti (EUR 35,
+  USD 2, AUD 0); chip, azzera, link riaperto, scala e CSV invariati.

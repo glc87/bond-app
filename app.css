@@ -1,4 +1,4 @@
-/* app.css — v0.2.6 */
+/* app.css — v0.2.7 */
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6475; --line: #e3e6eb;
   --accent: #0b5fff; --accent-ink: #ffffff; --accent-soft: #e8f0ff; --good: #0a7d3e; --warn: #b45309; --bad: #b91c1c;
@@ -47,6 +47,24 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
 .grid label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); align-self: end; padding: 8px 0; }
 .grid input.set, .grid select.set, .grid label.check.set { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; border-radius: 8px; }
 .grid label.check.set { padding-left: 8px; }
+/* facet: pulsante che apre un elenco a scelta multipla con conteggi */
+.facet { position: relative; }
+.facet-btn { width: 100%; text-align: left; padding: 8px 30px 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font-size: 14px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.facet-btn::after { content: "⌄"; position: absolute; right: 10px; top: 4px; color: var(--muted); }
+.facet-btn.set { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.facet-pop { position: absolute; z-index: 6; left: 0; right: 0; top: calc(100% + 4px); max-height: 300px; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px 0; }
+.facet-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 10px 6px; border-bottom: 1px solid var(--line); }
+.facet-head .hint { font-size: 11.5px; }
+.facet-close { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.facet-row, .grid label.facet-row { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 14px; color: var(--ink); }
+.facet-row input { margin: 0; width: 18px; height: 18px; flex: 0 0 auto; }
+.facet-row:hover { background: var(--accent-soft); }
+.facet-row span { flex: 1 1 auto; }
+.facet-row b { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.facet-row.zero { opacity: .45; }
+.facet-row.all { border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0 8px; border-top: 1px solid var(--line); margin-top: 6px; }
 .filter-bar #filter-live { flex: 1 1 100%; font-weight: 600; color: var(--ink); }
 .filter-bar .btn { padding: 11px 16px; font-size: 14.5px; font-weight: 600; }

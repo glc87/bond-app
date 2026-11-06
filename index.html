@@ -33,9 +33,9 @@
     <details class="more">
       <summary>Filtri avanzati <span id="filter-count"></span></summary>
       <div class="grid">
-        <label>Valuta (default EUR: in altre valute il rendimento non tiene conto del cambio) <select id="f-cur"><option value="">Tutte</option></select></label>
-        <label>Paese <select id="f-country"><option value="">Tutti</option></select></label>
-        <label>Mercato <select id="f-market"><option value="">MOT ed EuroTLX</option><option value="MOT">Solo MOT</option><option value="ETLX">Solo EuroTLX</option></select></label>
+        <label>Valuta (default EUR: in altre valute il rendimento non tiene conto del cambio) <div class="facet" id="f-cur" data-all="Tutte"><button type="button" class="facet-btn">Tutte</button><div class="facet-pop hidden"></div></div></label>
+        <label>Paese <div class="facet" id="f-country" data-all="Tutti"><button type="button" class="facet-btn">Tutti</button><div class="facet-pop hidden"></div></div></label>
+        <label>Mercato <div class="facet" id="f-market" data-all="MOT ed EuroTLX"><button type="button" class="facet-btn">MOT ed EuroTLX</button><div class="facet-pop hidden"></div></div></label>
         <label>Tipo <select id="f-kind">
           <option value="computable">Calcolabili (fisso, zero coupon, richiamabili)</option>
           <option value="nocall">Calcolabili, esclusi i richiamabili</option>
@@ -43,7 +43,7 @@
           <option value="zero">Solo zero coupon</option>
           <option value="all">Tutti, anche non calcolabili</option>
         </select></label>
-        <label>Scadenza min (anni) <input id="f-ymin" type="number" min="0" step="0.5" value="1"></label>
+        <label>Scadenza min (anni) <input id="f-ymin" type="number" min="0" step="0.5" value="0"></label>
         <label>Scadenza max (anni) <input id="f-ymax" type="number" min="0" step="1" placeholder="∞"></label>
         <label>Rendimento netto min % <input id="f-nmin" type="number" step="0.1" placeholder="es. 3"></label>
         <label>Cedola netta min % (flusso annuo) <input id="f-cmin" type="number" step="0.1" placeholder="es. 2,5"></label>
