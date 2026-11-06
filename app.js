@@ -1,8 +1,8 @@
-/* app.js — v0.11.0 — Bond Netto (PWA) */
+/* app.js — v0.11.1 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.0";
+  const APP_VERSION = "0.11.1";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -280,7 +280,17 @@
   function render() {
     const list = $("#list");
     const slice = state.filtered.slice(0, state.shown);
-    list.innerHTML = slice.map(cardHTML).join("") || '<p class="hint">Nessun titolo corrisponde ai filtri.</p>';
+    // Ricerca: se ci sono titoli che corrispondono al testo ma sono nascosti dagli altri filtri (es. BTP Valore non calcolabile,
+    // valuta diversa, incerti), lo diciamo e offriamo di mostrarli: altrimenti "non trova" un ISIN che c'è (IT0005583486, 06/11).
+    let hiddenNote = "";
+    if (cur.q) {
+      const hidden = state.bonds.filter(b => `${b.name} ${b.isin} ${b.issuer}`.toLowerCase().includes(cur.q) && !passes(b, null));
+      if (hidden.length) {
+        const why = b => !b._calc ? (b.not_computable_reason ? "non calcolabile: " + b.not_computable_reason.split(":")[0] : "senza rendimento") : b.currency !== "EUR" && !facetMatch("cur", b) ? "valuta " + b.currency : b._uncertain ? "incerto" : b._strip ? "strip" : (b.min_lot || 0) >= INST_LOT ? "lotto istituzionale" : "fuori dai filtri";
+        hiddenNote = `<p class="hint hidden-note">${hidden.length === 1 ? "1 titolo corrisponde" : hidden.length + " titoli corrispondono"} alla ricerca ma ${hidden.length === 1 ? "è nascosto" : "sono nascosti"} dai filtri: ${hidden.slice(0, 3).map(b => `<b>${esc(b.name)}</b> (${esc(why(b))})`).join(", ")}${hidden.length > 3 ? "…" : ""}. <button type="button" class="link" id="show-hidden">Mostra comunque</button></p>`;
+      }
+    }
+    list.innerHTML = hiddenNote + (slice.map(cardHTML).join("") || '<p class="hint">Nessun titolo corrisponde ai filtri.</p>');
     $("#count").textContent = `${state.filtered.length} titoli`;
     $("#more-btn").classList.toggle("hidden", state.shown >= state.filtered.length);
     renderBest();
@@ -640,6 +650,15 @@
     const cat = u.get("cat"); if (cat && $(`[data-cat="${cat}"]`)) { state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); any = true; }
     return any;
   }
+  // "Mostra comunque": allarga tutti i filtri tranne la ricerca
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#show-hidden")) return;
+    for (const name of Object.keys(FACETS)) { facetSel[name] = new Set(); renderFacetButton(name); }
+    $("#f-kind").value = "all"; $("#f-ymin").value = "0"; $("#f-ymax").value = ""; $("#f-nmin").value = ""; $("#f-cmin").value = ""; $("#f-lot").value = "";
+    $("#f-ask").checked = false; $("#f-nominus").checked = false; $("#f-uncertain").checked = true; $("#f-strips").checked = true; $("#f-inst").checked = true;
+    state.cat = "all"; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === "all"));
+    applyFilters();
+  });
   $("#btn-share").addEventListener("click", async () => {
     syncHash(); const url = location.href; let ok = false;
     try { if (navigator.share) { await navigator.share({ title: "Bond Netto: selezione", url }); ok = true; } } catch {}

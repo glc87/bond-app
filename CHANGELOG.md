@@ -145,3 +145,6 @@
   cur=EUR,USD&country=IT,ES. Il predicato dei filtri è ora un'unica funzione passes(b, skip) usata sia per la lista
   sia per i conteggi. Verificato: 0-1 anno → Tutte 161 / EUR 94 / USD 28; IT+ES → 37; conteggi valuta coerenti (EUR 35,
   USD 2, AUD 0); chip, azzera, link riaperto, scala e CSV invariati.
+- app v0.11.1: la ricerca avvisa quando un titolo corrisponde al testo ma è nascosto dai filtri (motivo: non calcolabile,
+  valuta, incerto, strip, lotto istituzionale) con "Mostra comunque" che allarga tutti i filtri tranne la ricerca.
+  Caso: IT0005583486 (BTP Valore Mz30, step-up → non calcolabile) "non si trovava".

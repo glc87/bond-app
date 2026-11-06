@@ -65,6 +65,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
 .facet-row b { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .facet-row.zero { opacity: .45; }
 .facet-row.all { border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.hidden-note { padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 10px; margin: 6px 0 10px; }
 .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0 8px; border-top: 1px solid var(--line); margin-top: 6px; }
 .filter-bar #filter-live { flex: 1 1 100%; font-weight: 600; color: var(--ink); }
 .filter-bar .btn { padding: 11px 16px; font-size: 14.5px; font-weight: 600; }
