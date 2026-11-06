@@ -1,8 +1,8 @@
-/* app.js — v0.11.7 — Bond Netto (PWA) */
+/* app.js — v0.11.9 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.7";
+  const APP_VERSION = "0.11.9";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -654,7 +654,20 @@
   ["#q", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
   function resetFilters() { (state.activeFilters || []).forEach(a => a.reset()); applyFilters(); }
   $("#filter-reset").addEventListener("click", resetFilters);
-  $("#filter-close").addEventListener("click", () => { $("details.more").removeAttribute("open"); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  $("#filter-close").addEventListener("click", () => {
+    $("details.more").removeAttribute("open"); window.scrollTo({ top: 0, behavior: "smooth" });
+    if ($("#filter-close").dataset.returnTo === "ladder") { delete $("#filter-close").dataset.returnTo; if (window.BondSim) BondSim.openLadder(); }   // tornati dalla scala
+  });
+  // API per la scala: filtri correnti e impostazione rapida (scorciatoie)
+  const filtersApi = {
+    currencies: () => [...facetSel.cur],
+    set: ({ cat, cur, countries, market }) => {
+      if (cur) facetSel.cur = new Set(cur); if (countries) facetSel.country = new Set(countries); if (market) facetSel.market = new Set(market);
+      for (const name of Object.keys(FACETS)) renderFacetButton(name);
+      if (cat) { state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); }
+      applyFilters();
+    },
+  };
   $("#active-filters").addEventListener("click", e => {
     const btn = e.target.closest("[data-af]"); if (!btn) return;
     if (btn.dataset.af === "all") return resetFilters();
@@ -746,7 +759,7 @@
       $("#meta").textContent = "Dati non disponibili: " + e.message;
     }
   }
-  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail, toggleFav, reliable, quality, CAT_LABEL, COUNTRY_NAME };
+  window.BondApp = { $, state, params, fmtPct, fmtNum, fmtEur, fmtCur, fmtDate, esc, priceBadge, openDetail, toggleFav, reliable, quality, CAT_LABEL, COUNTRY_NAME, filters: filtersApi };
   load();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

@@ -1,4 +1,4 @@
-/* sim.js — v0.2.1 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
+/* sim.js — v0.3.0 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
 (() => {
   "use strict";
   const A = window.BondApp, Y = window.Yields;
@@ -81,7 +81,8 @@
     const step = horizon / rungs; const out = []; let used = 0; const issuers = new Set();
     for (let k = 0; k < rungs; k++) {
       const lo = k * step, hi = (k + 1) * step;
-      const cands = pool.filter(b => b._years >= lo && b._years < hi + (k === rungs - 1 ? 1e-9 : 0)).sort((a, b) => b._calc.ytm_net_all - a._calc.ytm_net_all);
+      const score = opts.mode === "safe" ? (b => -(b._calc.spread_bund ?? 9)) : (b => b._calc.ytm_net_all);   // "safe": spread vs Bund più basso
+      const cands = pool.filter(b => b._years >= lo && b._years < hi + (k === rungs - 1 ? 1e-9 : 0)).sort((a, b) => score(b) - score(a));
       const target = total / rungs;
       let pick = null, nominal = 0;
       // diversificazione: un emittente per gradino se possibile (altrimenti si ripete)
@@ -114,87 +115,69 @@
     const cal = years.length ? `<h3>Flussi netti per anno</h3><table class="kv">${years.map(y => `<tr><td>${y}</td><td>cedole ${fmtCur(flows[y].c, ok[0].bond.currency)}${flows[y].r ? ` · rimborsi <b>${fmtCur(flows[y].r, ok[0].bond.currency)}</b>` : ""}</td></tr>`).join("")}</table>` : "";
     const spreads = ok.map(r => r.bond._calc.spread_bund).filter(x => x != null);
     const avgSpread = spreads.length ? spreads.reduce((a, b) => a + b, 0) / spreads.length : null;
-    return `<table class="kv ladder"><tr><th>Gradino</th><th>Titolo</th><th>Nominale</th><th>Netto annuo</th></tr>${rows}</table>${ld.cur !== "EUR" && ok.length ? `<p class="hint">Importi in <b>${ld.cur}</b>: il rendimento non tiene conto del cambio con l'euro.</p>` : ""}
+    return `<table class="kv ladder"><tr><th>Gradino</th><th>Titolo</th><th>Nominale</th><th>Netto annuo</th></tr>${rows}</table>${opts.cur !== "EUR" && ok.length ? `<p class="hint">Importi in <b>${opts.cur}</b>: il rendimento non tiene conto del cambio con l'euro.</p>` : ""}
       <div class="kpis"><div class="kpi"><div class="l">Esborso totale</div><div class="v">${fmtCur(res.used, ok.length ? ok[0].bond.currency : "EUR")}</div></div><div class="kpi"><div class="l">Rendimento netto medio (pesato)</div><div class="v good">${fmtPct(wAvg)}</div></div>${avgSpread != null ? `<div class="kpi"><div class="l">Rischio emittente medio (spread vs Bund)</div><div class="v ${avgSpread < 0.01 ? "good" : avgSpread < 0.02 ? "" : "ko"}">${avgSpread >= 0 ? "+" : ""}${fmtPct(avgSpread)}</div></div>` : ""}</div>
       ${cal}
       <div class="row"><button class="btn" id="ld-fav" ${ok.length ? "" : "disabled"}>★ Salva nei preferiti</button><button class="btn ghost" id="ld-pf" ${ok.length ? "" : "disabled"}>+ Aggiungi al portafoglio</button></div>
-      <p class="hint">Per ogni gradino sceglie il miglior rendimento netto tra i titoli <b>in EUR dell'universo scelto</b> (con prezzo affidabile, non incerti, non strip, non richiamabili, lotto sotto 100.000), con nominale arrotondato al lotto minimo e, quando possibile, un emittente diverso per gradino. Non è un consiglio: controlla emittente e rischio di ogni titolo nella scheda. Nessun reinvestimento ipotizzato: quando un gradino scade, decidi tu dove reinvestire.</p>`;
+      <p class="hint">Per ogni gradino sceglie ${opts.mode === "safe" ? "il titolo con lo spread vs Bund più basso" : "il miglior rendimento netto"} tra i titoli <b>della lista filtrata</b> (con prezzo affidabile, non incerti, non strip, non richiamabili, lotto sotto 100.000), con nominale arrotondato al lotto minimo e, quando possibile, un emittente diverso per gradino. Non è un consiglio: controlla emittente e rischio di ogni titolo nella scheda. Nessun reinvestimento ipotizzato: quando un gradino scade, decidi tu dove reinvestire.</p>`;
   }
 
-  // Universo della scala: "default" = lista con i filtri di default (EUR, calcolabili, tutte le categorie, senza incerti/strip/
-  // lotti istituzionali); "filtered" = lista filtrata attuale; "custom" = filtri scelti qui dentro (categoria, paese, mercato,
-  // richiamabili, netto minimo) con il numero di titoli per ogni voce. In tutti i casi: EUR, prezzo affidabile, non incerti,
-  // non strip, lotto < 100.000 (una scala si compra in euro, a tagli da privato).
-  const COUNTRY_NAME = A.COUNTRY_NAME || {};
-  const ld = { cur: "EUR", cats: new Set(), countries: new Set(), markets: new Set(), nocall: true, nmin: NaN };
-  // ammissibili: nella valuta scelta (una sola per scala: importo e nominali sono in quella valuta)
-  const eligibleIn = cur => b => b._calc && b._calc.ytm_net_all != null && b.currency === cur && A.reliable(b) && !b._uncertain && !b._strip && (b.min_lot || 0) < 100000;
-  const eligible = b => eligibleIn(ld.cur)(b);
-  const ldMatch = (b, skip) => (skip === "cat" || !ld.cats.size || ld.cats.has(b._cat)) && (skip === "country" || !ld.countries.size || ld.countries.has(b.country))
-    && (skip === "market" || !ld.markets.size || (b.markets || [b.market]).some(m => ld.markets.has(m))) && (skip === "nocall" || !ld.nocall || b.kind !== "callable") && (isNaN(ld.nmin) || b._calc.ytm_net_all * 100 >= ld.nmin);
-  function customPool() { return A.state.bonds.filter(b => eligible(b) && ldMatch(b, null)); }
-  const LD_CAT = { gov_it: "Stato italiano (12,5%)", gov_fx: "Stati esteri (12,5%)", supra: "Sovranazionali: BEI, UE, World Bank… (12,5%)", other: "Società e banche (26%)" };
-  function customFiltersHTML() {
-    const base = A.state.bonds.filter(eligible);
-    const count = (skip, pred) => base.filter(b => ldMatch(b, skip) && pred(b)).length;
-    // valuta: una sola, con il numero di ammissibili per ciascuna (gli altri filtri non si applicano al conteggio valuta)
-    const curCounts = {}; for (const b of A.state.bonds) if (b.currency && eligibleIn(b.currency)(b) && ldMatch(b, null)) curCounts[b.currency] = (curCounts[b.currency] || 0) + 1;
-    const curs = Object.keys(curCounts).sort((a, b) => curCounts[b] - curCounts[a] || a.localeCompare(b));
-    const cRowsCur = curs.map(c => `<label class="ld-row facet-like"><input type="radio" name="ld-cur" data-ld="cur" value="${c}" ${ld.cur === c ? "checked" : ""}> <span>${c}</span><b>${curCounts[c]}</b></label>`).join("");
-    const cats = ["gov_it", "gov_fx", "supra", "other"].map(c => `<label class="ld-row facet-like"><input type="checkbox" data-ld="cat" value="${c}" ${ld.cats.has(c) ? "checked" : ""}> <span>${LD_CAT[c]}</span><b>${count("cat", b => b._cat === c)}</b></label>`).join("");
-    const countries = [...new Set(base.map(b => b.country).filter(Boolean))].map(c => [c, count("country", b => b.country === c)]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const cRows = countries.map(([c, n]) => `<label class="ld-row facet-like ${n ? "" : "zero"}"><input type="checkbox" data-ld="country" value="${c}" ${ld.countries.has(c) ? "checked" : ""}> <span>${c}${COUNTRY_NAME[c] ? " · " + COUNTRY_NAME[c] : ""}</span><b>${n}</b></label>`).join("");
-    const mRows = ["MOT", "ETLX"].map(m => `<label class="ld-row facet-like"><input type="checkbox" data-ld="market" value="${m}" ${ld.markets.has(m) ? "checked" : ""}> <span>${m === "ETLX" ? "EuroTLX" : m}</span><b>${count("market", b => (b.markets || [b.market]).includes(m))}</b></label>`).join("");
-    return `<div class="ld-filters">
-      <div class="ld-col"><h4 class="sub">Valuta <span class="hint">(una sola: importo e nominali in questa valuta)</span></h4><div class="ld-scroll">${cRowsCur}</div>${ld.cur !== "EUR" ? `<p class="hint">Rendimenti in ${ld.cur}: il cambio con l'euro può cambiarli molto, in meglio o in peggio.</p>` : ""}</div>
-      <div class="ld-col"><h4 class="sub">Tipo di emittente <span class="hint">(decide l'aliquota; nessuno = tutti)</span></h4>${cats}</div>
-      <div class="ld-col"><h4 class="sub">Paese <span class="hint">(nessuno = tutti)</span></h4><div class="ld-scroll">${cRows}</div></div>
-      <div class="ld-col"><h4 class="sub">Mercato</h4>${mRows}
-        <label class="ld-row facet-like"><input type="checkbox" data-ld="nocall" ${ld.nocall ? "checked" : ""}> <span>Escludi richiamabili</span><b>${count("nocall", b => b.kind === "callable")} call</b></label>
-        <label class="check">Netto minimo % <input id="ld-nmin" type="number" step="0.1" style="width:80px" value="${isNaN(ld.nmin) ? "" : ld.nmin}"></label></div>
-      <p class="hint" style="grid-column:1/-1">Titoli ammissibili con questi filtri: <b id="ld-npool">${customPool().length}</b> (${ld.cur}, prezzo affidabile, non incerti, non strip, lotto sotto 100.000).</p></div>`;
+  // Universo della scala = la lista principale con i filtri attuali (stessi filtri, stessi conteggi), più scorciatoie.
+  // Valuta: quella dei filtri se è una sola, altrimenti EUR. Ammissibili: prezzo affidabile, non incerti, non strip,
+  // lotto < 100.000, non richiamabili. "Più sicuro" sceglie per gradino lo spread vs Bund più basso invece del rendimento.
+  const ld = { total: null, horizon: 10, rungs: 5, mode: "yield" };
+  const eligibleIn = cur => b => b._calc && b._calc.ytm_net_all != null && b.currency === cur && A.reliable(b) && !b._uncertain && !b._strip && (b.min_lot || 0) < 100000 && b.kind !== "callable" && !/call(?![a-z])/i.test(b.name);
+  function ladderCurrency() { const f = A.filters ? A.filters.currencies() : []; return f.length === 1 ? f[0] : "EUR"; }
+  const PRESETS = [
+    ["Tutto", { cat: "all", cur: ["EUR"], countries: [] }],
+    ["Solo BTP", { cat: "gov_it", cur: ["EUR"], countries: [] }],
+    ["Stati euro", { cat: "gov_fx", cur: ["EUR"], countries: ["DE", "FR", "ES", "AT", "BE", "NL", "FI", "IE", "PT", "SK", "SI", "LT", "LV", "EE", "GR", "HR", "CY", "MT", "LU"] }],
+    ["Sovranazionali", { cat: "supra", cur: ["EUR"], countries: [] }],
+  ];
+  function universeHTML() {
+    const cur = ladderCurrency(); const pool = A.state.filtered.filter(eligibleIn(cur));
+    const chips = (A.state.activeFilters || []).map(a => `${a.label} ${a.value}`); const cat = A.state.cat !== "all" ? [A.CAT_LABEL[A.state.cat] || A.state.cat] : [];
+    const desc = [...cat, ...chips].join(" · ") || "filtri di default";
+    const multi = A.filters && A.filters.currencies().length > 1 ? ` <span class="hint">(più valute nei filtri: la scala usa l'euro)</span>` : "";
+    return `<div class="ld-universe"><div><b>Titoli: quelli della lista con i filtri attuali</b> — ${esc(desc)}${multi}<br><span class="hint">${pool.length} ammissibili in ${cur} (prezzo affidabile, non incerti, non strip, non richiamabili, lotto sotto 100.000)</span></div>
+      <div class="row"><button type="button" class="btn ghost" id="ld-filters">Cambia filtri…</button></div>
+      <div class="chips ld-presets">${PRESETS.map(([n], k) => `<button type="button" class="chip" data-preset="${k}">${n}</button>`).join("")}</div><p class="hint">Scorciatoie: impostano i filtri della lista e ricostruiscono la scala. Per la massima prudenza combina "Sovranazionali" o "Stati euro" con "il più sicuro".</p></div>`;
+  }
+  function applyPreset(k) {
+    const [, pr] = PRESETS[k];
+    if (A.filters) A.filters.set({ cat: pr.cat, cur: pr.cur, countries: pr.countries, market: [] });
   }
 
   function openLadder() {
     const s = A.state.settings;
     $("#ladder-body").innerHTML = `<p class="hint">Una "scala" divide l'importo su scadenze scaglionate: ogni anno (o ogni gradino) rientra una parte del capitale, da spendere o reinvestire ai tassi di allora. Riduce il rischio di comprare tutto al momento sbagliato.</p>
       <div class="grid">
-        <label>Importo totale <input id="ld-total" type="number" step="1000" min="1000" value="${Math.max(s.nominal * 5, 10000)}"></label>
-        <label>Orizzonte (anni) <input id="ld-horizon" type="number" step="1" min="1" max="30" value="10"></label>
-        <label>Numero di gradini <input id="ld-rungs" type="number" step="1" min="2" max="15" value="5"></label>
-        <label>Universo dei titoli <select id="ld-pool"><option value="default">Lista di default (filtri azzerati)</option><option value="filtered">Lista filtrata attuale (${A.state.filtered.filter(eligibleIn("EUR")).length} ammissibili in EUR)</option><option value="custom">Scegli i filtri qui sotto</option></select></label>
+        <label>Importo totale <input id="ld-total" type="number" step="1000" min="1000" value="${ld.total || Math.max(s.nominal * 5, 10000)}"></label>
+        <label>Orizzonte (anni) <input id="ld-horizon" type="number" step="1" min="1" max="30" value="${ld.horizon}"></label>
+        <label>Numero di gradini <input id="ld-rungs" type="number" step="1" min="2" max="15" value="${ld.rungs}"></label>
+        <label>Scegli per gradino <select id="ld-mode"><option value="yield" ${ld.mode === "yield" ? "selected" : ""}>il rendimento netto più alto</option><option value="safe" ${ld.mode === "safe" ? "selected" : ""}>il più sicuro (spread vs Bund più basso)</option></select></label>
       </div>
-      <div id="ld-custom" class="hidden"></div>
+      <div id="ld-universe">${universeHTML()}</div>
       <div class="row"><button class="btn primary" id="ld-build">Costruisci la scala</button></div><div id="ld-out"></div>`;
     $("#ladder").classList.remove("hidden");
-    const renderCustom = () => { const box = $("#ld-custom"); box.classList.toggle("hidden", $("#ld-pool").value !== "custom"); if ($("#ld-pool").value === "custom") box.innerHTML = customFiltersHTML(); };
-    $("#ld-pool").addEventListener("change", renderCustom);
-    $("#ld-custom").addEventListener("change", e => {
-      const el = e.target; if (!el.dataset.ld && el.id !== "ld-nmin") return;
-      if (el.id === "ld-nmin") ld.nmin = parseFloat(el.value);
-      else if (el.dataset.ld === "cur") { ld.cur = el.value; ld.countries.clear(); }
-      else if (el.dataset.ld === "nocall") ld.nocall = el.checked;
-      else { const set = { cat: ld.cats, country: ld.countries, market: ld.markets }[el.dataset.ld]; if (el.checked) set.add(el.value); else set.delete(el.value); }
-      const scroll = $("#ld-custom .ld-scroll") ? $("#ld-custom .ld-scroll").scrollTop : 0;
-      renderCustom(); if ($("#ld-custom .ld-scroll")) $("#ld-custom .ld-scroll").scrollTop = scroll;
-    });
+    const remember = () => { ld.total = parseFloat($("#ld-total").value); ld.horizon = parseFloat($("#ld-horizon").value); ld.rungs = parseInt($("#ld-rungs").value, 10); ld.mode = $("#ld-mode").value; };
     const run = () => {
-      const total = parseFloat($("#ld-total").value), horizon = parseFloat($("#ld-horizon").value), rungs = parseInt($("#ld-rungs").value, 10), mode = $("#ld-pool").value;
-      if (!(total > 0 && horizon > 0 && rungs >= 2)) return;
-      let pool;
-      if (mode === "filtered") pool = A.state.filtered.filter(eligibleIn("EUR"));
-      else if (mode === "custom") pool = customPool();
-      else pool = A.state.bonds.filter(eligibleIn("EUR"));                // default: tutte le categorie, EUR, calcolabili
-      if (mode !== "custom") pool = pool.filter(b => b.kind !== "callable");   // nei primi due casi i richiamabili restano esclusi
-      const res = buildLadder({ total, horizon, rungs, pool });
-      $("#ld-out").innerHTML = ladderHTML(res, { total });
+      remember();
+      if (!(ld.total > 0 && ld.horizon > 0 && ld.rungs >= 2)) return;
+      const cur = ladderCurrency(); const pool = A.state.filtered.filter(eligibleIn(cur));
+      const res = buildLadder({ total: ld.total, horizon: ld.horizon, rungs: ld.rungs, pool, mode: ld.mode });
+      $("#ld-out").innerHTML = ladderHTML(res, { total: ld.total, cur, mode: ld.mode });
       const picks = res.rungs.filter(r => r.bond);
       $("#ld-fav").addEventListener("click", () => { picks.forEach(r => { if (!A.state.favs.has(r.bond.isin)) A.toggleFav(r.bond.isin); }); $("#ld-fav").textContent = "✓ salvati nei preferiti"; });
       $("#ld-pf").addEventListener("click", () => { if (window.BondPortfolio && BondPortfolio.addPositions) { BondPortfolio.addPositions(picks.map(r => ({ isin: r.bond.isin, nominal: r.nominal, price: r.bond._price, commission: r.c.commission_eur }))); $("#ladder").classList.add("hidden"); BondPortfolio.open(); } });
     };
     $("#ld-build").addEventListener("click", run);
+    $("#ladder-body").addEventListener("click", e => {
+      const pr = e.target.closest("[data-preset]"); if (pr) { applyPreset(+pr.dataset.preset); $("#ld-universe").innerHTML = universeHTML(); run(); return; }
+      if (e.target.closest("#ld-filters")) { remember(); $("#ladder").classList.add("hidden"); const more = $("details.more"); more.setAttribute("open", ""); more.scrollIntoView({ behavior: "smooth", block: "start" }); $("#filter-close").dataset.returnTo = "ladder"; }
+    });
   }
   $("#btn-ladder").addEventListener("click", openLadder);
 
-  window.BondSim = { simulate, mountSim, buildLadder, openLadder, VERSION: "0.2.1" };
+  window.BondSim = { simulate, mountSim, buildLadder, openLadder, VERSION: "0.3.0" };
 })();

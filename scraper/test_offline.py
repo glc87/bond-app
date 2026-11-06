@@ -1,5 +1,5 @@
 """
-test_offline.py — v0.1.5
+test_offline.py — v0.1.6
 Test offline su pagine campione reali (fixtures/ prelevate il 04/11/2026).
 Esegui:  python scraper/test_offline.py
 """
@@ -71,6 +71,9 @@ def test_classify():
     assert y.classify("Bnl Eur3m+0.4975% Jan29 Est Covered Eur", "Obbligazioni Finanziarie", "", "", 3.1355, 4).kind == "floating"
     assert y.classify("Mps Eur3m+0,53 Lg27 Est Covered Call Eur", "Obbligazioni", "", "", 3.148, 4).kind == "floating"
     assert y.classify("Italy 29eur Frn", "Titoli di Stato", "", "", 4.25, 2).kind == "floating"
+    assert y.classify("Deutschebank Green Fx3.63% Apr30call Eur", "Obbligazioni Finanziarie", "", "", 3.63, 1).kind == "callable"
+    assert y.classify("Alerionclean Green Fx4.75%Dec30call Eur", "Obbligazioni Corporate", "", "", 4.75, 1).kind == "callable"
+    assert y.classify("Callaway Golf Fx 4% Mar28 Eur", "Obbligazioni Corporate", "", "", 4.0, 1).kind == "fixed"
 
 
 def test_supranational_abbreviations():

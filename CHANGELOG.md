@@ -176,3 +176,11 @@
 - sim.js v0.2.1 / app 0.11.7: scala con scelta della valuta (una sola; importi e nominali in quella valuta, avviso cambio);
   "Tipo di emittente" con aliquota nelle etichette; diversificazione per paese negli Stati (EuroTLX e MOT scrivono
   "Romania" in modi diversi: finivano due Romania in scala).
+- sim.js v0.3.0 / app 0.11.9 / app.css 0.2.10: scala ridisegnata da utente: importo, orizzonte, gradini, "scegli per gradino"
+  (rendimento più alto / il più sicuro = spread vs Bund più basso); i titoli sono quelli della LISTA con i filtri attuali
+  (riassunto + ammissibili), pulsante "Cambia filtri…" che apre i filtri principali e torna alla scala con i valori
+  conservati, scorciatoie Tutto / Solo BTP / Stati euro / Sovranazionali. Tolti il pannello filtri interno e il netto minimo.
+  Valuta: quella dei filtri se unica, altrimenti EUR. Esempio 50.000 € / 5 anni: "il più sicuro" dà BOT, EFSF, World Bank,
+  CoE, Bobl a 1,33% netto con spread −0,86; "rendimento" 2,76% a +0,80.
+- yields v0.3.7 (+ app): richiamabili con "call" attaccato al nome ("Apr30call", "Gn32subcall": 10 titoli EuroTLX) non
+  erano riconosciuti e finivano in scala come fissi; ora regex call(?![a-z]); la scala li esclude anche sui dati di oggi.

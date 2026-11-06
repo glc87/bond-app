@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import re
 import logging
 import sys
 import time
@@ -218,7 +219,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
             # non sono veri zero coupon ma strutture con rimborso crescente (BI pubblica 4-6%, il prezzo implica <1%).
             # Un vero ZC a 20 anni a 95 renderebbe lo 0,25%: non plausibile -> non calcolabile.
             # (classify li marca "callable", non "zero": il controllo guarda il nome "Zc" — run 06/11: 10 Citigroup ancora calcolati)
-            if cls.kind in ("zero", "callable") and " zc " in f" {s.name.lower()} " and " call" in f" {s.name.lower()} " and r.ytm_gross is not None and r.ytm_gross < 0.015 and r.years_to_maturity > 5:
+            if cls.kind in ("zero", "callable") and " zc " in f" {s.name.lower()} " and re.search(r"call(?![a-z])", s.name.lower()) and r.ytm_gross is not None and r.ytm_gross < 0.015 and r.years_to_maturity > 5:
                 rec["computable"] = False; rec["kind"] = "structured"; rec["calc"] = None
                 rec["not_computable_reason"] = "zero coupon richiamabile con rimborso crescente (struttura): rendimento non determinabile dal prezzo"
         except Exception as e:  # mai far cadere il run per un titolo

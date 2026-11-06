@@ -1,4 +1,4 @@
-/* app.css — v0.2.9 */
+/* app.css — v0.2.10 */
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6475; --line: #e3e6eb;
   --accent: #0b5fff; --accent-ink: #ffffff; --accent-soft: #e8f0ff; --good: #0a7d3e; --warn: #b45309; --bad: #b91c1c;
@@ -112,6 +112,9 @@ button.fav:hover { color: #f59e0b; }
 .sim-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 10px; font-size: 13.5px; }
 .sim-ctl input[type=range] { width: 100%; }
 .sim-ctl select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.ld-universe { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 6px 0 10px; font-size: 13.5px; }
+.ld-universe .row { margin: 8px 0 6px; }
+.ld-presets { margin-top: 4px; }
 .ld-filters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 6px 0 10px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
 .ld-filters .ld-row { padding: 4px 2px; }
 .ld-filters h4.sub { margin: 0 0 4px; }
