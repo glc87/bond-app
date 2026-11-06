@@ -136,3 +136,6 @@
 - run_daily v0.7.4: i Citigroup/GS "Gm Zc … Call" risultavano "callable" e non "zero", quindi la regola sui ZC richiamabili
   non li prendeva (10 ancora calcolati con Δ fino a −6,5 vs BI). Ora il controllo guarda il nome: 11 titoli esclusi dal
   prossimo run (oggi restano nascosti come incerti).
+- app v0.10.4 / app.css v0.2.6: intestazione a griglia: titolo e 5 pulsanti sulla prima riga, sottotitolo breve sotto
+  ("3673 titoli · 06/11/2026 19:05 · 2775 calcolati", dettagli nel tooltip). Sul telefono l'altezza passa da ~600 a 74 px.
+  Su desktop (>700 px) resta su una riga.

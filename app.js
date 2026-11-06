@@ -1,8 +1,8 @@
-/* app.js — v0.10.3 — Bond Netto (PWA) */
+/* app.js — v0.10.4 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.10.4";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -614,7 +614,9 @@
       applyHash();   // filtri da link condiviso (sovrascrivono i default)
       updateFavChip();
       const runAt = new Date(d.meta.run_at);
-      $("#meta").textContent = `${d.meta.n_total} titoli MOT · rilevazione ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} con rendimento`;
+      const mk = d.meta.by_market || {}; const mkTxt = Object.keys(mk).length > 1 ? "MOT+EuroTLX" : (Object.keys(mk)[0] || "MOT");
+      $("#meta").textContent = `${d.meta.n_total} titoli · ${runAt.toLocaleDateString("it-IT")} ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · ${d.meta.n_computable} calcolati`;
+      $("#meta").title = `${mkTxt}: prezzi rilevati il ${runAt.toLocaleDateString("it-IT")} alle ${runAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}; ${d.meta.n_computable} titoli con rendimento calcolato su ${d.meta.n_total}`;
       applyFilters();
       renderAuctions();
       if (window.BondAlerts) BondAlerts.evaluateAll();

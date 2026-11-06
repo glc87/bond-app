@@ -1,4 +1,4 @@
-/* app.css — v0.2.5 */
+/* app.css — v0.2.6 */
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #0f172a; --muted: #5b6475; --line: #e3e6eb;
   --accent: #0b5fff; --accent-ink: #ffffff; --accent-soft: #e8f0ff; --good: #0a7d3e; --warn: #b45309; --bad: #b91c1c;
@@ -21,12 +21,16 @@ a { color: var(--accent); }
 main { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
 .hidden { display: none !important; }
 
-.top { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
-.brand h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
-.sub { color: var(--muted); font-size: 12.5px; }
-.row-btns { display: flex; gap: 6px; flex-shrink: 0; }
-@media (max-width: 420px) { .icon-btn { width: 34px; height: 34px; font-size: 15px; } .row-btns { gap: 4px; } }
+/* Intestazione: titolo e pulsanti sulla stessa riga, sottotitolo sotto a tutta larghezza (sul telefono il sottotitolo
+   accanto a 5 pulsanti andava a capo su 8 righe e occupava mezzo schermo, 06/11/2026). */
+.top { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "brand btns" "sub sub";
+  align-items: center; column-gap: 10px; row-gap: 2px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+.brand { grid-area: brand; min-width: 0; }
+.brand h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; white-space: nowrap; }
+.sub { grid-area: sub; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-btns { grid-area: btns; display: flex; gap: 6px; flex-shrink: 0; }
+@media (max-width: 420px) { .icon-btn { width: 34px; height: 34px; font-size: 15px; } .row-btns { gap: 4px; } .brand h1 { font-size: 18px; } }
+@media (min-width: 700px) { .top { grid-template-columns: auto 1fr auto; grid-template-areas: "brand sub btns"; } .sub { padding-left: 6px; } }
 .lnk { color: var(--accent); cursor: pointer; }
 .icon-btn { background: transparent; border: 1px solid var(--line); border-radius: 10px; width: 38px; height: 38px;
   font-size: 18px; color: var(--ink); cursor: pointer; }
