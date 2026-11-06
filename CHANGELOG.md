@@ -128,3 +128,11 @@
     esistono già; sync.js 0.1.2: pulsante "▶ Aggiorna i dati ora" nelle Impostazioni (basta il permesso Contents del token).
   * app 0.10.3: tolta l'attribuzione esplicita della fonte da footer, guida, scheda e README ("prezzi dei mercati MOT ed
     EuroTLX"); i link alla scheda ufficiale del titolo restano.
+- 06/11/2026 run manuale 17:55 (cron saltati): 3.673 titoli, 2.775 calcolabili, 0 falliti, 71'. Nuove classi: 188 strutturati
+  (31 perpetui), 23 ammortamento, variabili 478 (+ covered "Eur3m"). Verifica YTM lordo >6 mesi: MOT 1.418/1.465 entro 0,02;
+  EuroTLX 497/1.135 entro 0,02 con mediana +0,004 (ieri 219 e −0,04: il run più tardi, 19:05, trova più rendimenti già
+  aggiornati da BI). bi_vs_prev_ref ancora vuoto (lo history di ieri non aveva "yr"): da domani. Prima Issue avvisi aperta
+  (#1, 35 titoli). Deploy Pages del commit dati fallito dopo 7' in "deployment_queued" (lato GitHub): ripubblicato col push.
+- run_daily v0.7.4: i Citigroup/GS "Gm Zc … Call" risultavano "callable" e non "zero", quindi la regola sui ZC richiamabili
+  non li prendeva (10 ancora calcolati con Δ fino a −6,5 vs BI). Ora il controllo guarda il nome: 11 titoli esclusi dal
+  prossimo run (oggi restano nascosti come incerti).

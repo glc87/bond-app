@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.3
+run_daily.py — v0.7.4
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -200,7 +200,8 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
             # Zero coupon richiamabili quotati vicino alla pari con vita lunga (Citigroup/GS "Gm Zc ... Call", run 05/11/2026):
             # non sono veri zero coupon ma strutture con rimborso crescente (BI pubblica 4-6%, il prezzo implica <1%).
             # Un vero ZC a 20 anni a 95 renderebbe lo 0,25%: non plausibile -> non calcolabile.
-            if cls.kind == "zero" and " call" in f" {s.name.lower()} " and r.ytm_gross is not None and r.ytm_gross < 0.015 and r.years_to_maturity > 5:
+            # (classify li marca "callable", non "zero": il controllo guarda il nome "Zc" — run 06/11: 10 Citigroup ancora calcolati)
+            if cls.kind in ("zero", "callable") and " zc " in f" {s.name.lower()} " and " call" in f" {s.name.lower()} " and r.ytm_gross is not None and r.ytm_gross < 0.015 and r.years_to_maturity > 5:
                 rec["computable"] = False; rec["kind"] = "structured"; rec["calc"] = None
                 rec["not_computable_reason"] = "zero coupon richiamabile con rimborso crescente (struttura): rendimento non determinabile dal prezzo"
         except Exception as e:  # mai far cadere il run per un titolo
