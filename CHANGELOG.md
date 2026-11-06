@@ -160,3 +160,9 @@
   sui 13: 6,8e-13. Le anomalie segnalano piano/scheda discordanti (frequenza, scadenza, tasso corrente). Dati dal run di lunedì.
 - Nota rischio tasso riformulata: "con un aumento di 1 punto dei tassi di interesse (ad esempio per un rialzo
   dell'inflazione o della BCE, o perché l'emittente è visto più rischioso)…".
+- app v0.11.3 / app.css v0.2.8: tasto "indietro" del telefono gestito con la cronologia del browser: chiude la finestra
+  aperta (scheda, portafoglio, avvisi, scala, confronto, impostazioni, diagnostica), chiude il pannello filtri, ripristina
+  la categoria precedente; solo con tutto chiuso esce dall'app. Le chiusure da ✕/Esc/tocco fuori riallineano la
+  cronologia (transizione scheda→portafoglio gestita: nessuna chiusura indesiderata). Verificato in headless: 7 scenari.
+  BUG corretto: dalla 0.10.4 la regola CSS .sub (nowrap) dell'intestazione valeva anche nella scheda e spingeva la ✕
+  fuori dallo schermo sul telefono (x=521 su 400 px): ora la regola è limitata all'intestazione.

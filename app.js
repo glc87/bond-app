@@ -1,8 +1,8 @@
-/* app.js — v0.11.2 — Bond Netto (PWA) */
+/* app.js — v0.11.3 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.2";
+  const APP_VERSION = "0.11.3";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -591,6 +591,47 @@
 
   // ---------------- eventi ----------------
   $("#btn-settings").addEventListener("click", openSettings);
+  // ---------------- tasto "indietro" di Android: chiude finestre, pannello filtri e ripristina la categoria ----------------
+  // Ogni apertura spinge una voce nella cronologia del browser; "indietro" la toglie e annulla l'azione invece di uscire
+  // dall'app (06/11/2026). Chiusure dall'interfaccia (✕, Esc, tocco fuori) fanno history.back() così la cronologia resta pulita.
+  const nav = { stack: [], popping: false };
+  function navPush(kind, undo) { nav.stack.push({ kind, undo }); history.pushState({ nav: nav.stack.length }, ""); }
+  function navDrop(kind) {   // l'azione è stata annullata dall'interfaccia: togli la voce (se è in cima, tramite la cronologia)
+    const i = nav.stack.map(x => x.kind).lastIndexOf(kind); if (i < 0) return;
+    const entry = nav.stack[i]; entry.closed = true;
+    // rinviato di un tick: se nel frattempo si è aperta un'altra finestra (es. scheda → portafoglio) non si torna indietro
+    // nella cronologia (chiuderebbe quella nuova); la voce resta e il primo "indietro" sarà a vuoto, mai un'uscita.
+    setTimeout(() => {
+      const j = nav.stack.indexOf(entry); if (j < 0) return;
+      if (j === nav.stack.length - 1) { nav.stack.pop(); nav.popping = true; history.back(); } else nav.stack.splice(j, 1);
+    }, 0);
+  }
+  window.addEventListener("popstate", () => {
+    const wasUi = nav.popping; nav.popping = false;
+    if (wasUi) return;                       // tornati indietro noi stessi dopo una chiusura dall'interfaccia
+    const top = nav.stack.pop();
+    if (top && !top.closed) top.undo();      // "indietro" dal telefono: annulla l'ultima azione
+  });
+  // finestre modali: osserva la classe "hidden" (vale per tutte, anche quelle di portafoglio/avvisi/scala)
+  new MutationObserver(muts => {
+    for (const m of muts) {
+      const el = m.target; if (!el.classList.contains("modal")) continue;
+      const hidden = el.classList.contains("hidden"), was = (m.oldValue || "").split(/\s+/).includes("hidden");
+      if (hidden === was) continue;
+      const kind = "modal:" + el.id;
+      if (!hidden) navPush(kind, () => el.classList.add("hidden"));
+      else if (!nav.popping && nav.stack.some(x => x.kind === kind)) navDrop(kind);
+    }
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"], attributeOldValue: true, subtree: true });
+  // pannello filtri avanzati
+  const more = $("details.more");
+  more.addEventListener("toggle", () => { if (more.open) navPush("filters", () => more.removeAttribute("open")); else navDrop("filters"); });
+  // categoria (chip in alto): "indietro" torna alla categoria precedente
+  function setCat(cat, fromNav) {
+    const prev = state.cat; if (cat === prev) return;
+    state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); applyFilters();
+    if (!fromNav) navPush("cat", () => setCat(prev, true));
+  }
   document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", e => e.target.closest(".modal").classList.add("hidden")));
   document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.add("hidden"); }));
   document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); });
@@ -609,7 +650,7 @@
     const el = e.target.closest("[data-isin]"); if (el) openDetail(el.dataset.isin);
   });
   $("#cat-chips").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return;
-    $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x === c)); state.cat = c.dataset.cat; applyFilters(); });
+    setCat(c.dataset.cat); });
   ["#q", "#f-kind", "#f-ymin", "#f-ymax", "#f-nmin", "#f-lot", "#f-cmin", "#f-ask", "#f-nominus", "#f-uncertain", "#f-strips", "#f-inst"].forEach(id => $(id).addEventListener("input", applyFilters));
   function resetFilters() { (state.activeFilters || []).forEach(a => a.reset()); applyFilters(); }
   $("#filter-reset").addEventListener("click", resetFilters);
