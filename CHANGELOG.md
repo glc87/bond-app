@@ -115,3 +115,10 @@
   * simulatore: default a metà vita; nota per zero coupon (pro rata tassato come interesse, eccedenza al 26%: stima lieve-
     mente ottimista) e richiamabili; scala: cedole nette/anno = cedola annua netta sul nominale (prima era un rapporto
     approssimato sui titoli brevi); dichiarati i criteri di esclusione (richiamabili, lotti ≥100k).
+- Secondo controllo (ricalcolo indipendente): simulatore "se vendo prima" riscritto da zero in Python (tools non committati)
+  e confrontato col JS su 5 casi (BTP 2046 a 4 anni; Austria 2031 con prima cedola corta e +1 punto; zero coupon 2040 a
+  2,5 anni; CDP 2036 semestrale 26% su 25.000 con −1 punto; Austria 2037 sopra 100 con +2 punti): scarto massimo 2e-11.
+  Casi limite: link con valori non numerici (ora ignorati, resta il default), scala con importo sotto il lotto (0 titoli,
+  pulsanti disabilitati), 15 gradini su 30 anni, CSV di lista vuota, scenario −3 punti. Corretti (app 0.10.2, sim 0.1.2):
+  il simulatore compariva anche sotto l'anno (guardia mai attiva); la scala dimensionava su "lotto minimo 1" di BI
+  (491 titoli MOT, es. Austria: comprabili a 1 €) → ora taglio minimo 1.000 per i gradini.

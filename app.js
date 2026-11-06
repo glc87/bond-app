@@ -1,8 +1,8 @@
-/* app.js — v0.10.1 — Bond Netto (PWA) */
+/* app.js — v0.10.2 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.10.1";
+  const APP_VERSION = "0.10.2";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -583,7 +583,8 @@
     const u = new URLSearchParams(h); let any = false;
     for (const [k, sel] of Object.entries(HASH_FIELDS)) {
       const el = $(sel); const v = u.get(k); if (v == null) continue; any = true;
-      if (el.type === "checkbox") el.checked = v === "1"; else if (el.tagName === "SELECT") { if ([...el.options].some(o => o.value === v)) el.value = v; } else el.value = v;
+      if (el.type === "checkbox") el.checked = v === "1"; else if (el.tagName === "SELECT") { if ([...el.options].some(o => o.value === v)) el.value = v; }
+      else if (el.type === "number") { if (v !== "" && isFinite(parseFloat(v))) el.value = v; } else el.value = v;   // numeri non validi nel link: resta il default
     }
     const cat = u.get("cat"); if (cat && $(`[data-cat="${cat}"]`)) { state.cat = cat; $$("#cat-chips .chip").forEach(x => x.classList.toggle("on", x.dataset.cat === cat)); any = true; }
     return any;

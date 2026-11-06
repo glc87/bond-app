@@ -1,4 +1,4 @@
-/* sim.js — v0.1.1 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
+/* sim.js — v0.1.2 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
 (() => {
   "use strict";
   const A = window.BondApp, Y = window.Yields;
@@ -60,8 +60,8 @@
 
   function mountSim(b, nominal) {
     const host = $("#d-sim"); if (!host || !b._calc) return;
-    const maxH = Math.max(0.5, Math.floor(b._calc.years_to_maturity * 2) / 2 - 0.5);
-    if (maxH < 0.5) { host.innerHTML = ""; return; }
+    const maxH = Math.floor(b._calc.years_to_maturity * 2) / 2 - 0.5;   // ultimo semestre intero prima della scadenza
+    if (maxH < 0.5) { host.innerHTML = ""; return; }                       // sotto l'anno: niente simulatore
     const h0 = Math.min(maxH, Math.max(0.5, Math.round(b._calc.years_to_maturity) / 2));   // default: a metà vita
     host.innerHTML = `<h3>Se vendo prima della scadenza</h3>
       <div class="sim-ctl"><label>Dopo <output id="sim-h">${fmtNum(h0, 1)}</output> anni <input id="sim-hold" type="range" min="0.5" max="${maxH}" step="0.5" value="${h0}"></label>
@@ -82,7 +82,8 @@
       let pick = null, nominal = 0;
       // diversificazione: un emittente per gradino se possibile (altrimenti si ripete)
       for (const pass of [0, 1]) {
-        for (const b of cands) { if (pass === 0 && issuers.has(b.issuer)) continue; const lot = b.min_lot || 1000; const n = Math.floor(target / lot) * lot; if (n >= lot) { pick = b; nominal = n; break; } }
+        // taglio: lotto minimo del titolo, ma almeno 1.000 (BI riporta "1" o "100" per 660 titoli: non si compra 600 € di Bund)
+        for (const b of cands) { if (pass === 0 && issuers.has(b.issuer)) continue; const lot = Math.max(b.min_lot || 1000, 1000); const n = Math.floor(target / lot) * lot; if (n >= lot) { pick = b; nominal = n; break; } }
         if (pick) break;
       }
       if (pick) issuers.add(pick.issuer);
