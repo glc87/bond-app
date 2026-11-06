@@ -1,8 +1,8 @@
-/* app.js — v0.11.4 — Bond Netto (PWA) */
+/* app.js — v0.11.5 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.4";
+  const APP_VERSION = "0.11.5";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -457,8 +457,8 @@
     if (c.mod_duration == null) return "";
     const d = c.mod_duration, tq = (b._price + c.accrued_gross) / 100 * nominal;
     const lvl = d < 2 ? "basso" : d < 5 ? "medio" : d < 9 ? "alto" : "molto alto";
-    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): con un aumento di 1 punto dei tassi di interesse (ad esempio per un rialzo dell'inflazione o della BCE, o perché l'emittente è visto più rischioso) il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
-      (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); con un calo di 1 punto sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100 e le cedole non cambiano.</div>`;
+    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): se il rendimento che il mercato chiede per questo titolo sale di 1 punto (per tassi più alti, inflazione attesa in aumento o emittente giudicato più rischioso), il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
+      (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); se scende di 1 punto, sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100 e le cedole non cambiano.</div>`;
   }
 
   // Piano cedolare dei BTP step-up (Valore/Futura/Più/Insieme) da stepup.json: tabella delle fasi + nota sul premio
