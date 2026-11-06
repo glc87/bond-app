@@ -173,3 +173,6 @@
 - BUG (app + run_daily 0.7.6): la categoria "Sovranazionali" era vuota (0 titoli in lista e nei chip) perché il MOT
   elenca BEI, EFSF, UE, World Bank… sotto "Titoli di stato esteri" e il controllo sulla tipologia veniva prima di quello
   sull'emittente sovranazionale. Ora: 610 sovranazionali (164 ammissibili per la scala in EUR), 1.137 Stati esteri.
+- sim.js v0.2.1 / app 0.11.7: scala con scelta della valuta (una sola; importi e nominali in quella valuta, avviso cambio);
+  "Tipo di emittente" con aliquota nelle etichette; diversificazione per paese negli Stati (EuroTLX e MOT scrivono
+  "Romania" in modi diversi: finivano due Romania in scala).
