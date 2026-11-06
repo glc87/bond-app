@@ -1,4 +1,4 @@
-/* yields.js — v0.3.2
+/* yields.js — v0.3.3
    Porting fedele di scraper/yields.py (compute) in JavaScript, per ricalcolare i
    rendimenti all-in nel browser con i parametri scelti dall'utente.
    Deve dare gli stessi numeri di Python a parità di input: vedi tools/check_js_vs_py.mjs. */
@@ -97,8 +97,7 @@
     let tax = bond.tax_rate;
     if (p.taxGov != null && p.taxOther != null) tax = (bond.tax_rate <= 0.125001) ? p.taxGov : p.taxOther;
     if (p.taxOverride != null) tax = p.taxOverride;
-    let couponAnnual = bond.coupon_annual || 0, freq = bond.coupon_frequency || 0;
-    if (bond.kind === "zero") { couponAnnual = 0; freq = 0; }
+    const { couponAnnual, freq, rateFor } = couponParams(bond);
     const price = p.price;
     const { future, prev } = couponSchedule(maturity, freq, settle, accrualStart, firstCoupon);
     const next = future.length ? future[0] : null;
@@ -106,7 +105,7 @@
     const accN = accG * (1 - tax);
     const per = freq ? couponAnnual / freq : 0, perNet = per * (1 - tax);
     const f1 = firstCouponFactor(prev, next, freq, accrualStart);
-    const cpnG = i => per * (i === 0 ? f1 : 1), cpnN = i => cpnG(i) * (1 - tax);
+    const cpnG = i => ((rateFor && freq) ? rateFor(future[i]) / freq : per) * (i === 0 ? f1 : 1), cpnN = i => cpnG(i) * (1 - tax);
     const gain = Math.max(0, 100 - price), cgTax = tax * gain, minus = Math.max(0, price - 100);
     const redemptionNet = 100 - cgTax;
     const yf = d => (d - settle) / DAY / 365.0;
@@ -149,19 +148,41 @@
   }
 
   // Prezzo tel quel e rateo a una data futura, dato un rendimento lordo (per il simulatore "se vendo prima")
-  function priceAtYield(bond, settle, y) {
-    const maturity = parseISO(bond.maturity), accrualStart = parseISO(bond.accrual_start), firstCoupon = parseISO(bond.first_coupon_date);
+  // Step-up (BTP Valore/Futura/Più/Insieme): identico a yields.py stepup_rate_for. plan = bond.stepup (da stepup.json).
+  function stepupRateFor(plan) {
+    if (!plan) return null;
+    const g = parseISO(plan.godimento), m = parseISO(plan.maturity);
+    const bounds = []; let y = 0;
+    for (const [n, rate] of plan.phases) { y += n; bounds.push([y, +rate]); }
+    const monthsBetween = (ta, tb) => { const a = new Date(ta), b = new Date(tb); return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth()) - (b.getUTCDate() < a.getUTCDate() - 3 ? 1 : 0); };
+    return d => {
+      if (plan.final_coupon != null) return d >= m ? +plan.final_coupon : 0;
+      const k = Math.max(1, Math.ceil(monthsBetween(g, d) / 12));
+      for (const [yb, rate] of bounds) if (k <= yb) return rate;
+      return bounds[bounds.length - 1][1];
+    };
+  }
+  // tasso annuo e frequenza da usare per il rateo (Insieme: accrual_rate 4,54 annuo, cedola unica 22,70 a scadenza)
+  function couponParams(bond) {
     let couponAnnual = bond.coupon_annual || 0, freq = bond.coupon_frequency || 0;
     if (bond.kind === "zero") { couponAnnual = 0; freq = 0; }
+    if (bond.stepup) { freq = bond.stepup.freq; if (bond.stepup.accrual_rate != null) couponAnnual = +bond.stepup.accrual_rate; }
+    return { couponAnnual, freq, rateFor: stepupRateFor(bond.stepup) };
+  }
+
+  function priceAtYield(bond, settle, y) {
+    const maturity = parseISO(bond.maturity), accrualStart = parseISO(bond.accrual_start), firstCoupon = parseISO(bond.first_coupon_date);
+    const { couponAnnual, freq, rateFor } = couponParams(bond);
     const { future, prev } = couponSchedule(maturity, freq, settle, accrualStart, firstCoupon);
     const next = future.length ? future[0] : null;
     const per = freq ? couponAnnual / freq : 0, f1 = firstCouponFactor(prev, next, freq, accrualStart);
     const yf = d => (d - settle) / DAY / 365.0;
-    const dirty = future.reduce((s, d, i) => s + per * (i === 0 ? f1 : 1) / Math.pow(1 + y, yf(d)), 0) + 100 / Math.pow(1 + y, yf(maturity));
+    const cpn = (d, i) => ((rateFor && freq) ? rateFor(d) / freq : per) * (i === 0 ? f1 : 1);
+    const dirty = future.reduce((s, d, i) => s + cpn(d, i) / Math.pow(1 + y, yf(d)), 0) + 100 / Math.pow(1 + y, yf(maturity));
     const accG = accrued(couponAnnual, freq, settle, prev, next);
     return { dirty, clean: dirty - accG, accrued: accG, future, perCoupon: per, firstFactor: f1 };
   }
 
-  const api = { compute, priceAtYield, settlementDate, addMonths, couponSchedule, accrued, parseISO, toISO, irr, modifiedDuration, DAY, VERSION: "0.3.2" };
+  const api = { compute, priceAtYield, couponParams, settlementDate, addMonths, couponSchedule, accrued, parseISO, toISO, irr, modifiedDuration, DAY, VERSION: "0.3.3" };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Yields = api;
 })(typeof window !== "undefined" ? window : globalThis);

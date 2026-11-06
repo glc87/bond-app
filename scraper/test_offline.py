@@ -1,5 +1,5 @@
 """
-test_offline.py — v0.1.4
+test_offline.py — v0.1.5
 Test offline su pagine campione reali (fixtures/ prelevate il 04/11/2026).
 Esegui:  python scraper/test_offline.py
 """
@@ -78,6 +78,24 @@ def test_supranational_abbreviations():
         rate, reason = y.tax_rate_for("Titoli di stato esteri", issuer)
         assert rate == 0.125 and reason.startswith("sovranazionale"), (issuer, reason)
     rate, reason = y.tax_rate_for("Titoli di stato esteri", "REPUBLIC OF ROMANIA"); assert reason.startswith("titolo di Stato")
+
+
+def test_stepup_plan():
+    # BTP Valore marzo 2024 (IT0005583486): 3,25% anni 1-3, 4,00% anni 4-6, trimestrale. Rif. 100,51 del 05/11/2026:
+    # BI lordo 3,81, rateo 0,58036 (verificato il 06/11/2026 su tutti i 13 step-up: scarto max 0,005 salvo Gn27 a 7 mesi)
+    import json
+    plan = json.loads((Path(__file__).parent / "stepup.json").read_text(encoding="utf-8"))["IT0005583486"]
+    rf = y.stepup_rate_for(plan)
+    assert rf(date(2027, 3, 5)) == 3.25 and rf(date(2027, 6, 5)) == 4.00 and rf(date(2030, 3, 5)) == 4.00
+    r = y.compute(100.51, "ref", date(2026, 11, 5), date(2030, 3, 5), 3.25, 4, 0.125, "stepup", date(2024, 3, 5), y.CostParams(), True, None, rf)
+    approx(r.accrued_gross, 0.58036, 1e-5); approx(r.ytm_gross * 100, 3.81, 0.01)
+    # BTP Valore Insieme: cedola unica 22,70 a scadenza, rateo al 4,54 annuo. Rif. 101,79: BI lordo 3,80
+    plan = json.loads((Path(__file__).parent / "stepup.json").read_text(encoding="utf-8"))["IT0005735227"]
+    rf = y.stepup_rate_for(plan)
+    assert rf(date(2027, 10, 27)) == 0.0 and rf(date(2031, 10, 27)) == 22.70
+    r = y.compute(101.79, "ref", date(2026, 11, 5), date(2031, 10, 27), 4.54, 1, 0.125, "stepup", date(2026, 10, 27), y.CostParams(), True, None, rf)
+    approx(r.ytm_gross * 100, 3.80, 0.01)
+    assert abs(r.coupons_net_total_eur - 22.70 * 0.875 / 100 * 10000) < 1e-6
 
 
 def test_zero_coupon_bi_convention():

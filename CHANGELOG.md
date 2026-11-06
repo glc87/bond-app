@@ -148,3 +148,15 @@
 - app v0.11.1: la ricerca avvisa quando un titolo corrisponde al testo ma è nascosto dai filtri (motivo: non calcolabile,
   valuta, incerto, strip, lotto istituzionale) con "Mostra comunque" che allarga tutti i filtri tranne la ricerca.
   Caso: IT0005583486 (BTP Valore Mz30, step-up → non calcolabile) "non si trovava".
+- BTP step-up calcolabili (yields 0.3.6 / yields.js 0.3.3 / run_daily 0.7.5 / app 0.11.2 / sim 0.1.3). Nuova tabella
+  scraper/stepup.json (v1.0.0) con i piani cedolari MEF di 13 titoli: BTP Valore giu-23, ott-23, mar-24, mag-24, ott-25,
+  mar-26, ott-26, Valore Insieme ott-26 (cedola unica 22,70% a scadenza), BTP Più feb-25 (put a 4 anni solo per i
+  sottoscrittori), BTP Futura lug-20, nov-20, apr-21, nov-21. Fonti: comunicati MEF via rivaluta.it, money.it, btpoggi.it,
+  orafinanza.it. Verifica indipendente: per tutti i 13 il tasso della fase corrente coincide con la cedola pubblicata dal
+  mercato, e il nostro YTM lordo sul prezzo di riferimento coincide con quello pubblicato entro 0,005 (Gn27 a 7 mesi: 0,035);
+  rateo identico al 5° decimale (Insieme: BI usa un conteggio 30/360, YTM comunque uguale). Premio fedeltà mai conteggiato
+  (spetta solo ai sottoscrittori in collocamento) e detto in scheda col piano delle fasi. compute() accetta rate_for(d);
+  il simulatore usa i tassi di fase (2 anni su Valore Mz30: 2 cedole al 3,25% + 6 al 4,00%, verificato). Parità JS/Python
+  sui 13: 6,8e-13. Le anomalie segnalano piano/scheda discordanti (frequenza, scadenza, tasso corrente). Dati dal run di lunedì.
+- Nota rischio tasso riformulata: "con un aumento di 1 punto dei tassi di interesse (ad esempio per un rialzo
+  dell'inflazione o della BCE, o perché l'emittente è visto più rischioso)…".

@@ -1,8 +1,8 @@
-/* app.js — v0.11.1 — Bond Netto (PWA) */
+/* app.js — v0.11.2 — Bond Netto (PWA) */
 (() => {
   "use strict";
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
-  const APP_VERSION = "0.11.1";
+  const APP_VERSION = "0.11.2";
   const DEFAULTS = { nominal: 10000, commissionPct: 0.19, commissionMin: 5, commissionMax: 19, bolloRate: 0.2, taxGov: 12.5, taxOther: 26 }; // Fineco min 2,95 / ING min 8: via di mezzo
   const PAGE = 60;
   const fmtPct = (v, d = 2) => v == null || !isFinite(v) ? "n.d." : (v * 100).toLocaleString("it-IT", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -432,6 +432,7 @@
       <div class="kpi"><div class="l">Guadagno netto totale a scadenza (${holdLabel(c.years_to_maturity)})</div><div class="v good">${fmtCur(c.net_gain_total_eur, b.currency)} <span class="small">= ${totalReturn(c)} (non annualizzato)</span></div></div>
 
     </div>${minus}${src}${exc}
+    ${stepupHTML(b)}
     ${rateRiskHTML(b, c, nominal)}
     ${b.currency !== "EUR" ? fxNote(b, c, nominal) : ""}
     <h3>Flussi per ${nominal.toLocaleString("it-IT")} ${esc(b.currency)} nominali</h3><table class="kv">
@@ -456,8 +457,20 @@
     if (c.mod_duration == null) return "";
     const d = c.mod_duration, tq = (b._price + c.accrued_gross) / 100 * nominal;
     const lvl = d < 2 ? "basso" : d < 5 ? "medio" : d < 9 ? "alto" : "molto alto";
-    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): se i rendimenti di mercato salgono di 1 punto, il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
-      (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); se scendono di 1 punto, sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100.</div>`;
+    return `<div class="note risk"><b>Rischio tasso ${lvl}</b> (duration modificata ${fmtNum(d, 1)}): con un aumento di 1 punto dei tassi di interesse (ad esempio per un rialzo dell'inflazione o della BCE, o perché l'emittente è visto più rischioso) il prezzo scende di circa <b>${fmtPct(d / 100, 1)}</b>
+      (≈ ${fmtCur(tq * d / 100, b.currency)} su ${fmtCur(nominal, b.currency)} nominali); con un calo di 1 punto sale altrettanto. Conta solo se vendi prima della scadenza: a scadenza rimborsa 100 e le cedole non cambiano.</div>`;
+  }
+
+  // Piano cedolare dei BTP step-up (Valore/Futura/Più/Insieme) da stepup.json: tabella delle fasi + nota sul premio
+  function stepupHTML(b) {
+    const sp = b.stepup; if (!sp) return "";
+    const g = new Date(sp.godimento + "T00:00:00Z"); let y = 0;
+    const rows = sp.phases.map(([n, rate]) => { const from = new Date(Date.UTC(g.getUTCFullYear() + y, g.getUTCMonth(), g.getUTCDate())); y += n; const to = new Date(Date.UTC(g.getUTCFullYear() + y, g.getUTCMonth(), g.getUTCDate())); return `<tr><td>${fmtDate(from.toISOString().slice(0, 10))} → ${fmtDate(to.toISOString().slice(0, 10))}</td><td>${sp.final_coupon != null ? "—" : fmtPct(rate / 100, 2) + " annuo"}</td></tr>`; }).join("");
+    const extra = sp.final_coupon != null ? `<tr><td>Cedola unica a scadenza</td><td><b>${fmtPct(sp.final_coupon / 100, 2)}</b> del nominale (nessuna cedola intermedia)</td></tr>` : "";
+    const prem = sp.premium ? `Il premio fedeltà (${typeof sp.premium === "number" ? fmtPct(sp.premium / 100, 1) : esc(sp.premium)}) spetta solo a chi ha sottoscritto in collocamento e tiene fino alla scadenza: comprando sul mercato <b>non</b> lo ricevi, e qui non è conteggiato.` : "Nessun premio fedeltà.";
+    const put = sp.put_note ? ` ${esc(sp.put_note.charAt(0).toUpperCase() + sp.put_note.slice(1))}: non vale per chi compra sul mercato.` : "";
+    return `<h3>Piano cedolare (${esc(sp.name)})</h3><table class="kv">${rows}${extra}</table>
+      <p class="hint">${sp.final_coupon != null ? "Cedola unica fissata dal MEF a fine collocamento" : `Cedole ${({ 1: "annuali", 2: "semestrali", 4: "trimestrali" })[sp.freq] || ""} crescenti fissate dal MEF a fine collocamento`}: il rendimento qui sopra usa le cedole future effettive, non solo quella corrente. ${prem}${put}</p>`;
   }
 
   function seriesShard(isin) {   // identica a run_daily.series_shard

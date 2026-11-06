@@ -1,5 +1,5 @@
 """
-run_daily.py — v0.7.4
+run_daily.py — v0.7.5
 Job giornaliero: scarica tutti i titoli MOT da Borsa Italiana, calcola i rendimenti
 netti e scrive:
   data/bonds.json              fotografia corrente (input + risultati con costi di default)
@@ -30,7 +30,7 @@ import borsa_italiana as bi
 import eurotlx as tlx
 import yields as y
 
-VERSION = "0.7.4"
+VERSION = "0.7.5"
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
@@ -72,6 +72,21 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
 
     tax, tax_why = y.tax_rate_for(s.tipologia, s.issuer, s.guarantor)
     cls = y.classify(s.name, s.tipologia, s.structure, b.tipo_bond, cpn, freq)
+    # Step-up con piano cedolare noto (BTP Valore/Futura/Più/Insieme, stepup.json): calcolabili, premio fedeltà escluso
+    plan = STEPUP.get(s.isin)
+    rate_for = None
+    if plan and cls.kind == "stepup":
+        if (freq or 0) != plan["freq"] or (s.maturity or row.maturity) != date.fromisoformat(plan["maturity"]):
+            anomalies.append(f"piano step-up: frequenza/scadenza della tabella ({plan['freq']}, {plan['maturity']}) diverse dalla scheda ({freq}, {s.maturity})")
+        else:
+            rate_for = y.stepup_rate_for(plan)
+            cur_rate = rate_for(y.add_months(date.fromisoformat(plan["godimento"]), 12 * ((trade_date - date.fromisoformat(plan["godimento"])).days // 365 + 1)))
+            if plan.get("final_coupon") is None and cpn is not None and abs(cur_rate - cpn) > 0.011:
+                anomalies.append(f"piano step-up: tasso di fase {cur_rate} ≠ cedola corrente della scheda {cpn}")
+            if plan.get("accrual_rate") is not None:
+                cpn = float(plan["accrual_rate"]); freq = plan["freq"]
+            prem = plan.get("premium")
+            cls = y.BondClass("stepup", True, "cedole crescenti da piano MEF" + (f"; premio fedeltà {prem}% solo per chi ha sottoscritto in collocamento: NON conteggiato" if prem else "") + ("; " + plan["put_note"] if plan.get("put_note") else ""))
     if "tel quel" in (s.trading_mode or "").lower() and cls.kind == "fixed" and (cpn or 0) > 0:
         cls = y.BondClass("fixed", False, "quotato tel quel (prezzo comprensivo di rateo): calcolo non supportato")
 
@@ -162,7 +177,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
             if ref and s.bi_yield_gross is not None:
                 ref_date = s.ref_date or trade_date
                 true_zc = y.is_true_zero_coupon(s.name, b.tipo_bond, s.tipologia)
-                r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date)
+                r_ref = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date, rate_for)
                 if r_ref.ytm_gross is not None:
                     chk["ytm_gross_vs_bi"] = round(r_ref.ytm_gross * 100 - s.bi_yield_gross, 3)
                     chk["ytm_gross_on_ref"] = round(r_ref.ytm_gross * 100, 3)
@@ -173,7 +188,7 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
                     # Deduzione dell'aliquota dal netto pubblicato da BI: confronto le due ipotesi (12,5% e 26%).
                     # Il segnale è utile solo se le due ipotesi distano abbastanza (titoli brevi a cedola bassa: no).
                     other = y.TAX_OTHER if tax == y.TAX_GOV else y.TAX_GOV
-                    r_oth = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date)
+                    r_oth = y.compute(ref, "ref", ref_date, maturity, cpn or 0.0, freq, other, cls.kind, s.accrual_start, costs, true_zc, s.first_coupon_date, rate_for)
                     if r_oth.ytm_net_bi_convention is not None:
                         mine = r_ref.ytm_net_bi_convention * 100
                         oth = r_oth.ytm_net_bi_convention * 100
@@ -194,8 +209,10 @@ def build_record(row: bi.ListRow, s: bi.Scheda, b: bi.Book, trade_date: date, co
                                 anomalies.append(f"aliquota {tax:.3f} non confermata da BI (nessuna delle due combacia bene)")
                 if chk.get("ytm_gross_vs_bi") is not None and abs(chk["ytm_gross_vs_bi"]) > 0.05 and r_ref.years_to_maturity > 0.5:
                     anomalies.append(f"YTM lordo scostato da BI di {chk['ytm_gross_vs_bi']}")
-            r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, True, s.first_coupon_date)
+            r = y.compute(price, src, trade_date, maturity, cpn or 0.0, freq, tax, cls.kind, s.accrual_start, costs, True, s.first_coupon_date, rate_for)
             rec["calc"] = y.result_to_dict(r)
+            if rate_for is not None:
+                rec["stepup"] = {k: plan[k] for k in ("name", "godimento", "maturity", "freq", "phases", "final_coupon", "accrual_rate", "premium", "put", "put_note") if k in plan}
             rec["check"] = chk
             # Zero coupon richiamabili quotati vicino alla pari con vita lunga (Citigroup/GS "Gm Zc ... Call", run 05/11/2026):
             # non sono veri zero coupon ma strutture con rimborso crescente (BI pubblica 4-6%, il prezzo implica <1%).
@@ -320,6 +337,13 @@ def bi_check_summary(records: list, bi_lag: dict) -> dict:
             res[m] = {"n": len(ds), "within_0_02": sum(abs(d) <= 0.02 for d in ds), "beyond_0_25": sum(abs(d) > 0.25 for d in ds),
                       "median": ds[len(ds) // 2], "vs_prev_ref": bi_lag.get(m)}
     return res
+
+
+STEPUP: dict = {}
+try:
+    STEPUP = {k: v for k, v in json.loads((Path(__file__).parent / "stepup.json").read_text(encoding="utf-8")).items() if not k.startswith("_")}
+except Exception as _e:   # senza tabella i titoli restano semplicemente non calcolabili
+    log.warning("stepup.json non caricato: %s", _e)
 
 
 def category_of(rec: dict) -> str:   # stessa logica di app.js category()

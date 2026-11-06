@@ -1,5 +1,5 @@
 """
-yields.py — v0.3.5
+yields.py — v0.3.6
 Motore di calcolo rendimenti per obbligazioni a tasso fisso e zero coupon,
 dal punto di vista di un investitore privato residente in Italia.
 
@@ -33,9 +33,9 @@ import math
 import re
 from dataclasses import dataclass, asdict
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Callable
 
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 
 TAX_GOV = 0.125
 TAX_OTHER = 0.26
@@ -299,6 +299,27 @@ def accrued_interest(coupon_annual: float, freq: int, settle: date, prev: Option
     return per * (settle - prev).days / notional_period_days(next_, freq)
 
 
+def stepup_rate_for(plan: dict):
+    """Da una voce di stepup.json ritorna rate_for(d): tasso annuo della cedola pagata in d.
+    L'anno k (1..n) va dal k-1-esimo al k-esimo anniversario del godimento; la cedola pagata in d appartiene all'anno
+    in cui cade d (d coincide con la fine del periodo). final_coupon: unica cedola a scadenza (BTP Valore Insieme)."""
+    g = date.fromisoformat(plan["godimento"]); m = date.fromisoformat(plan["maturity"])
+    bounds = []; y = 0
+    for n_years, rate in plan["phases"]:
+        y += n_years; bounds.append((y, float(rate)))
+    def months_between(a: date, b: date) -> int:
+        return (b.year - a.year) * 12 + (b.month - a.month) - (1 if b.day < a.day - 3 else 0)
+    def rate_for(d: date) -> float:
+        if plan.get("final_coupon") is not None:
+            return float(plan["final_coupon"]) if d >= m else 0.0
+        k = max(1, -(-months_between(g, d) // 12))   # ceil
+        for yb, rate in bounds:
+            if k <= yb:
+                return rate
+        return bounds[-1][1]
+    return rate_for
+
+
 def modified_duration(flows: list[tuple[float, float]], y: Optional[float]) -> Optional[float]:
     """Duration modificata = Macaulay / (1+y), sui flussi positivi (cedole e rimborso) scontati al rendimento y
     (capitalizzazione annua, tempi ACT/365 come l'IRR). Approssima la variazione % del prezzo tel quel per +1 punto di tasso.
@@ -385,9 +406,11 @@ class YieldResult:
 def compute(price: float, price_source: str, trade_date: date, maturity: date,
             coupon_annual: float, freq: int, tax_rate: float, kind: str,
             accrual_start: Optional[date], costs: CostParams, bi_taxes_discount: bool = True,
-            first_coupon: Optional[date] = None) -> YieldResult:
+            first_coupon: Optional[date] = None, rate_for: Optional[Callable[[date], float]] = None) -> YieldResult:
     """bi_taxes_discount: True per strip/BOT/Zc (BI tassa lo scarto nel suo netto), False per i "Tf 0%"
-    (BI li tratta come titoli con cedola: netto = lordo). Influenza SOLO ytm_net_bi_convention."""
+    (BI li tratta come titoli con cedola: netto = lordo). Influenza SOLO ytm_net_bi_convention.
+    rate_for(d): tasso annuo % della cedola pagata alla data d (step-up: BTP Valore/Futura/Più, tabella stepup.json);
+    coupon_annual resta il tasso del periodo in corso e serve per il rateo."""
     settle = settlement_date(trade_date)
     years = (maturity - settle).days / 365.0
     notes: list[str] = []
@@ -401,7 +424,9 @@ def compute(price: float, price_source: str, trade_date: date, maturity: date,
     per = coupon_annual / freq if freq else 0.0
     per_net = per * (1 - tax_rate)
     f1 = first_coupon_factor(prev, next_, freq, accrual_start)   # prima cedola corta/lunga
-    def cpn_g(i: int) -> float: return per * (f1 if i == 0 else 1.0)
+    def cpn_g(i: int) -> float:
+        p_i = (rate_for(future[i]) / freq) if (rate_for and freq) else per
+        return p_i * (f1 if i == 0 else 1.0)
     def cpn_n(i: int) -> float: return cpn_g(i) * (1 - tax_rate)
 
     gain = max(0.0, 100.0 - price)

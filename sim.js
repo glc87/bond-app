@@ -1,4 +1,4 @@
-/* sim.js — v0.1.2 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
+/* sim.js — v0.1.3 — Bond Netto: simulatore "se vendo prima" e costruttore di scala (ladder) */
 (() => {
   "use strict";
   const A = window.BondApp, Y = window.Yields;
@@ -24,7 +24,9 @@
     const N = nominal;
     // cedole incassate tra regolamento e uscita (la prima puo' essere corta: fattore dal calcolo principale)
     const cpnDates = c0.coupon_dates.map(Y.parseISO).filter(d => d > settle0 && d <= exit);
-    const cpnAmt = d => (Y.toISO(d) === c0.coupon_dates[0] ? c0.first_coupon_factor : 1) * c0.coupon_net_per_period / 100 * N;
+    // importo della cedola pagata in d: tasso di quel periodo (step-up: dal piano MEF), netto, con fattore prima cedola
+    const cpar = Y.couponParams(b);
+    const cpnAmt = d => (Y.toISO(d) === c0.coupon_dates[0] ? c0.first_coupon_factor : 1) * ((cpar.rateFor && cpar.freq) ? cpar.rateFor(d) / cpar.freq : cpar.couponAnnual / (cpar.freq || 1)) * (1 - tax) / 100 * N;
     const couponsNet = cpnDates.reduce((s, d) => s + cpnAmt(d), 0);
     const saleClean = px.clean, saleAccNet = px.accrued * (1 - tax);
     const gain = saleClean - b._price;
